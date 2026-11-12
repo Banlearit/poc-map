@@ -30,21 +30,7 @@
     --ease: cubic-bezier(.16, 1, .3, 1);
     --safe-b: env(safe-area-inset-bottom, 0px);
     --safe-t: env(safe-area-inset-top, 0px);
-    color-scheme: light dark;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --ink: oklch(0.95 0.01 235);
-      --ink-2: oklch(0.74 0.02 235);
-      --paper: oklch(0.26 0.02 235);
-      --paper-2: oklch(0.31 0.022 235);
-      --line: oklch(0.38 0.02 235);
-      --accent: oklch(0.78 0.11 205);
-      --accent-ink: oklch(0.2 0.03 235);
-      --accent-soft: oklch(0.34 0.05 215);
-      --danger: oklch(0.75 0.15 25);
-      --shadow: 0 1px 2px oklch(0 0 0 / .4), 0 8px 24px -6px oklch(0 0 0 / .6);
-    }
+    color-scheme: light;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; background: var(--paper-2); color: var(--ink); font-family: var(--font); overscroll-behavior: none; }
@@ -298,13 +284,12 @@ const OFM = 'https://tiles.openfreemap.org/styles/';
 const vec = {}; // vector basemaps, created on demand
 const vecLayer = name => vec[name] ??= L.maplibreGL({ style: OFM + name, attribution: '© OpenStreetMap · OpenFreeMap © OpenMapTiles' });
 const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: '© Esri' });
-const mq = matchMedia('(prefers-color-scheme: dark)');
-let useSat = false, styleLight = 'positron', styleDark = 'dark';
+let useSat = false, styleLight = 'positron';
 function applyBase() {
   [sat, ...Object.values(vec)].forEach(l => map.hasLayer(l) && map.removeLayer(l));
-  (useSat ? sat : vecLayer(mq.matches ? styleDark : styleLight)).addTo(map);
+  (useSat ? sat : vecLayer(styleLight)).addTo(map);
 }
-applyBase(); mq.addEventListener('change', applyBase);
+applyBase();
 $('btnSat').onclick = () => { useSat = !useSat; $('btnSat').setAttribute('aria-pressed', useSat); applyBase(); };
 
 const markers = new Map(), pinData = new Map();
