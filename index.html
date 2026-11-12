@@ -166,14 +166,24 @@
   #arLayer { position: absolute; inset: 0; overflow: hidden; }
   .ar-top { position: absolute; z-index: 5; top: calc(12px + var(--safe-t)); left: 12px; right: 12px; display: flex; gap: 8px; align-items: center; }
   .ar-close { width: 44px; height: 44px; background: var(--paper); box-shadow: var(--shadow); }
-  .ar-hud { flex: 1; justify-content: center; padding: 10px 14px; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; gap: 10px; }
+  .ar-hud { flex: 1; justify-content: center; padding: 10px 14px; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; gap: 8px; }
+  .ar-hud span { white-space: nowrap; }
+  .ar-hud .cal::after { content: ""; display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--accent); }
   .ar-hud .sep { width: 1px; height: 16px; background: var(--line); }
   .ar-range { padding: 0 14px; border: 0; font: 500 14px var(--font); color: var(--ink); cursor: pointer; gap: 6px; white-space: nowrap; }
-  .ar-hint { position: absolute; z-index: 5; left: 12px; right: 12px; bottom: calc(24px + var(--safe-b)); max-width: 460px; margin: 0 auto; background: var(--ink); color: var(--paper); border-radius: 16px; padding: 12px 16px; font-size: 14px; line-height: 1.45; box-shadow: var(--shadow); text-align: center; }
+  .ar-hint { position: absolute; z-index: 5; left: 12px; right: 12px; bottom: calc(112px + var(--safe-b)); max-width: 460px; margin: 0 auto; background: var(--ink); color: var(--paper); border-radius: 16px; padding: 12px 16px; font-size: 14px; line-height: 1.45; box-shadow: var(--shadow); text-align: center; }
   .ar-hint:empty { display: none; }
   .btn.sm { height: 44px; padding: 0 14px; font-size: 14px; border-radius: 14px; }
   .btn:disabled { opacity: .4; pointer-events: none; }
-  .ar-calbtn { position: absolute; z-index: 5; right: 12px; bottom: calc(92px + var(--safe-b)); padding: 10px 16px; border: 0; font: 600 14px var(--font); color: var(--ink); cursor: pointer; }
+  .ar-shutter { position: absolute; z-index: 5; left: 50%; bottom: calc(22px + var(--safe-b)); translate: -50% 0; width: 76px; height: 76px; border-radius: 50%; border: 4px solid #fff; background: transparent; padding: 0; cursor: pointer; transition: transform .15s var(--ease); box-shadow: 0 2px 10px oklch(0 0 0 / .35); }
+  .ar-shutter span { position: absolute; inset: 4px; border-radius: 50%; background: #fff; transition: transform .15s var(--ease); }
+  .ar-shutter:active span { transform: scale(.88); }
+  .ar-gallery { position: absolute; z-index: 5; left: 20px; bottom: calc(34px + var(--safe-b)); width: 52px; height: 52px; background: var(--paper); box-shadow: var(--shadow); }
+  #ar::after { content: ""; position: absolute; inset: 0; z-index: 7; background: #fff; opacity: 0; pointer-events: none; }
+  #ar.flash::after { animation: flash .35s ease-out; }
+  @keyframes flash { from { opacity: .85; } }
+  .toast { z-index: 1200; }
+  .ar-calbtn { position: absolute; z-index: 5; right: 12px; bottom: calc(34px + var(--safe-b)); padding: 10px 16px; border: 0; font: 600 14px var(--font); color: var(--ink); cursor: pointer; }
   .ar-calbtn[hidden], .ar-cal[hidden] { display: none; }
   .ar-cal { position: absolute; z-index: 6; left: 12px; right: 12px; bottom: calc(16px + var(--safe-b)); max-width: 460px; margin: 0 auto; background: var(--paper); border-radius: 22px; box-shadow: var(--shadow); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
   .cal-h { display: flex; align-items: center; justify-content: space-between; }
@@ -226,6 +236,7 @@
     <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5M5 21h14"/></symbol>
     <symbol id="i-scan" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/></symbol>
     <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></symbol>
     <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 2.5s6.5 7 6.5 11.5a6.5 6.5 0 0 1-13 0C5.5 9.500 12 2.500 12 2.500z"/></symbol>
   </defs>
 </svg>
@@ -265,6 +276,8 @@
     <div class="pill ar-hud"><span id="arHead">--°</span><span class="sep"></span><span id="arGps">GPS …</span></div>
     <button class="pill ar-range" id="arRange" aria-label="เปลี่ยนระยะ">ระยะ <b id="arRangeTxt">100 ม.</b></button>
   </div>
+  <button class="icon-btn ar-gallery" id="arGallery" aria-label="เลือกรูปจากเครื่อง"><svg class="i"><use href="#i-image"/></svg></button>
+  <button class="ar-shutter" id="arShutter" aria-label="ถ่ายรูปและปักหมุดตรงนี้"><span></span></button>
   <button class="pill ar-calbtn" id="arCalBtn">ปรับให้ตรง</button>
   <div class="ar-hint" id="arHint" role="status"></div>
   <div class="ar-cal" id="arCal" hidden>
@@ -418,7 +431,7 @@ async function compress(file, max = 1280) {
 }
 let pending = null;
 
-$('btnShot').onclick = () => $('file').click();
+$('btnShot').onclick = () => openAR({ shoot: true });
 $('file').onchange = async e => {
   const f = e.target.files[0]; e.target.value = '';
   if (!f) return;
@@ -631,7 +644,7 @@ function arFrame() {
   const gp = livePos();                                      // steadier than the raw latest fix
   const eff = gp ? { lat: gp.lat + cal.dLat, lng: gp.lng + cal.dLng, acc: gp.acc } : null;
   $('arHead').textContent = camAz == null ? '--°' : `${Math.round(camAz)}° ${dirName(camAz)}`;
-  $('arGps').textContent = gp ? `GPS ±${Math.round(gp.acc)} ม.${isCal() ? ' · ปรับแล้ว' : ''}` : 'GPS …';
+  $('arGps').textContent = gp ? `GPS ±${Math.round(gp.acc)} ม.` : 'GPS …'; $('arGps').classList.toggle('cal', !!isCal());
   let hint = '';
   const hide = () => ar.els.forEach(e => e.hidden = true);
   if (!eff) { hint = 'กำลังหาตำแหน่ง GPS…'; hide(); }
@@ -655,7 +668,7 @@ function arFrame() {
     for (const it of items) {
       const el = arPinEl(it.p); seen.add(it.p.id);
       let x = W / 2 + f * it.xc / Math.max(it.zc, .001), y = H / 2 - f * it.yc / Math.max(it.zc, .001);
-      const on = it.zc > .05 && x > 20 && x < W - 20;
+      const on = it.zc > .05 && x > 95 && x < W - 95;   // keep the whole label on screen
       const dAz = Math.abs(sdiff(it.brg, camAz)); if (it.dist >= 3 && dAz < bestAim) { bestAim = dAz; ar.aimed = { ...it, dAz }; }
       if (!on) {
         if (edges++ >= 4) { el.hidden = true; continue; }
@@ -674,9 +687,10 @@ function arFrame() {
     ar.nearest = null; pinData.forEach(p => { const d = L.latLng(eff.lat, eff.lng).distanceTo([p.lat, p.lng]); if (!ar.nearest || d < ar.nearest.d) ar.nearest = { p, d }; });
     const el0 = Math.asin(clamp(S.F[2], -1, 1)) / RAD;
     if (el0 < -55) hint = 'ยกมือถือตั้งตรง แล้วหันกล้องไปข้างหน้า';
+    else if (!items.length && ar.shoot) hint = 'ยืนที่จุดท่อ แล้วกดปุ่มถ่ายรูป ตำแหน่งจะถูกบันทึกให้เอง';
     else if (!items.length) hint = pinData.size ? `ไม่มีจุดในระยะ ${rangeLabel(ar.range)} · กดปุ่มระยะเพื่อขยาย` : 'ยังไม่มีจุดที่บันทึกไว้';
     else if (eff.acc > 20) hint = `GPS คลาดเคลื่อน ±${Math.round(eff.acc)} ม. · หมุดอาจเพี้ยน ลองไปที่โล่งแจ้ง`;
-    else if (performance.now() - ar.t0 < 6000) hint = 'หันกล้องไปทางจุดที่บันทึกไว้ · ถ้าหมุดไม่ตรง กด "ปรับให้ตรง"';
+    else if (performance.now() - ar.t0 < 6000) hint = ar.shoot ? 'ยืนที่จุดท่อ แล้วกดปุ่มถ่ายรูป ตำแหน่งจะถูกบันทึกให้เอง' : 'หันกล้องไปทางจุดที่บันทึกไว้ · ถ้าหมุดไม่ตรง กด "ปรับให้ตรง"';
   }
   if (!$('arCal').hidden && ++ar.tick % 6 === 0) renderCal();
   const h = $('arHint'); if (h.textContent !== hint) h.textContent = hint;
@@ -704,18 +718,18 @@ $('calBbtn').onclick = () => {                      // "this pin is straight ahe
 };
 $('calReset').onclick = () => { cal = { dLat: 0, dLng: 0, azOff: 0, t: 0, lat: 0, lng: 0 }; try { localStorage.removeItem('pp-cal'); } catch {} renderCal(); };
 
-async function openAR() {
+async function openAR(opt = {}) {
   if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
     try { if (await DeviceOrientationEvent.requestPermission() !== 'granted') toast('ต้องอนุญาตเซนเซอร์เข็มทิศ'); } catch {}
   }
-  closeDetail(); loadCal(); Object.assign(ar, { on: true, raw: null, s: {}, yaw: 0, yawT: 0, got: false, rel: false, t0: performance.now() });
-  arEl.hidden = false; arEl.classList.remove('nocam'); closeCal();
+  closeDetail(); loadCal(); Object.assign(ar, { shoot: !!opt.shoot, on: true, raw: null, s: {}, yaw: 0, yawT: 0, got: false, rel: false, t0: performance.now() });
+  arEl.hidden = false; arEl.classList.remove('nocam', 'flash'); closeCal();
   window.addEventListener('deviceorientationabsolute', onOrient);
   window.addEventListener('deviceorientation', onOrient);
   try {
-    ar.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    ar.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
     arVideo.srcObject = ar.stream; arVideo.play().catch(() => {});
-  } catch { arEl.classList.add('nocam'); toast('เปิดกล้องไม่ได้ · ใช้มุมมองเข็มทิศแทน'); }
+  } catch { arEl.classList.add('nocam'); toast('เปิดกล้องในหน้านี้ไม่ได้ · ปุ่มถ่ายรูปจะเปิดกล้องของเครื่องแทน'); }
   if (!me) getFreshPos();
   arFrame();
 }
@@ -725,9 +739,28 @@ function closeAR() {
   ar.stream?.getTracks().forEach(t => t.stop()); ar.stream = null; arVideo.srcObject = null;
   arLayer.innerHTML = ''; ar.els.clear(); arEl.hidden = true;
 }
-$('btnAR').onclick = openAR; $('arClose').onclick = closeAR;
+$('btnAR').onclick = () => openAR(); $('arClose').onclick = closeAR;
 $('arRange').onclick = () => { ar.range = AR_RANGES[(AR_RANGES.indexOf(ar.range) + 1) % AR_RANGES.length]; $('arRangeTxt').textContent = rangeLabel(ar.range); };
 addEventListener('keydown', e => { if (e.key === 'Escape' && ar.on) closeAR(); });
+
+// In-page shutter: grabs a frame from the live camera, so the browser never switches to the camera app
+// (on low-memory Android phones that switch makes the system reload the page and the photo is lost).
+$('arShutter').onclick = async () => {
+  if (!ar.stream) { closeAR(); $('file').click(); return; }          // no in-page camera: use the device camera app
+  if (!arVideo.videoWidth) { toast('กล้องยังไม่พร้อม รอสักครู่แล้วกดอีกครั้ง'); return; }
+  const vw = arVideo.videoWidth, vh = arVideo.videoHeight, sc = Math.min(1, 1280 / Math.max(vw, vh));
+  const c = document.createElement('canvas'); c.width = Math.round(vw * sc); c.height = Math.round(vh * sc);
+  c.getContext('2d').drawImage(arVideo, 0, 0, c.width, c.height);
+  const photo = c.toDataURL('image/jpeg', 0.75);
+  arEl.classList.remove('flash'); void arEl.offsetWidth; arEl.classList.add('flash');
+  let a = await collectPos(); if (!a) { await getFreshPos(); a = avgPos(); }
+  closeAR();
+  if (!a) { pending = { photo }; startManual('ไม่พบตำแหน่ง · แตะแผนที่ตรงจุดที่วางท่อ'); return; }
+  pending = { lat: a.lat, lng: a.lng, acc: a.acc, source: a.n > 1 ? `GPS เฉลี่ย ${a.n} ครั้ง` : 'GPS มือถือ', photo };
+  openSave();
+};
+$('arGallery').onclick = () => { closeAR(); $('file').click(); };
+
 
 // ---------- Init ----------
 DB.all().then(pins => {
