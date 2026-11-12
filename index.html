@@ -824,11 +824,25 @@ function drawPipes(W, H, f, S, eff, yawAll, cosLat) {
   };
   const sx = c => W / 2 + f * c.xc / c.zc, sy = c => H / 2 - f * c.yc / c.zc;
   lineGroups().forEach((vs, id) => {
-    if (vs.length < 2) return;
-    const pts = vs.map(v => { const d = depthOf(v) ?? .6; return { v, d, g: cam(v, 0), p: cam(v, d) }; });
+    let single = false, seg = vs;
+    if (vs.length < 2) {                                         // one point only: show a short stub along the direction you were facing
+      single = true; const v0 = vs[0], b = (v0.dir || 0) * RAD, off = m => ({ ...v0, lat: v0.lat + m * Math.cos(b) / 111320, lng: v0.lng + m * Math.sin(b) / (111320 * cosLat) });
+      seg = [off(-1.5), off(1.5)];
+    }
+    const pts = seg.map(v => { const d = depthOf(v) ?? .6; return { v, d, g: cam(v, 0), p: cam(v, d), deep: cam(v, d + .8) }; });
     if (Math.min(...pts.map(q => q.g.r)) > ar.range) return;
     const col = pinColor(vs[0]), dia = (+vs[0].dia || 1) * .0254;
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    // see-through ground: a soil wall from the surface down past the pipe, so it looks like the floor is cut open along the pipe
+    const clipPoly = P => { const out = []; for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length], ia = a.zc >= NEAR, ib = b.zc >= NEAR;
+      if (ia) out.push(a); if (ia !== ib) { const t = (NEAR - a.zc) / (b.zc - a.zc); out.push({ xc: a.xc + (b.xc - a.xc) * t, yc: a.yc + (b.yc - a.yc) * t, zc: NEAR }); } } return out; };
+    for (let i = 1; i < pts.length; i++) {
+      const poly = clipPoly([pts[i - 1].g, pts[i].g, pts[i].deep, pts[i - 1].deep]); if (poly.length < 3) continue;
+      const xy = poly.map(c => [sx(c), sy(c)]), ys = xy.map(q => q[1]), y0 = Math.min(...ys), y1 = Math.max(...ys);
+      const gr = ctx.createLinearGradient(0, y0, 0, y1 + 1); gr.addColorStop(0, 'rgba(92,60,34,.62)'); gr.addColorStop(.45, 'rgba(150,108,64,.5)'); gr.addColorStop(1, 'rgba(196,170,112,.42)');
+      ctx.fillStyle = gr; ctx.beginPath(); xy.forEach((q, k) => k ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.lineWidth = 1.5; ctx.setLineDash([]); ctx.stroke();
+    }
     // route on the ground (dashed), so you can see where the pipe runs above it
     ctx.setLineDash([4, 7]); ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 2;
     for (let i = 1; i < pts.length; i++) { const s = clip(pts[i - 1].g, pts[i].g); if (!s) continue; ctx.beginPath(); ctx.moveTo(sx(s[0]), sy(s[0])); ctx.lineTo(sx(s[1]), sy(s[1])); ctx.stroke(); }
@@ -847,18 +861,28 @@ function drawPipes(W, H, f, S, eff, yawAll, cosLat) {
       ctx.beginPath(); ctx.moveTo(x1 + nx * w1 / 2, y1 + ny * w1 / 2); ctx.lineTo(x2 + nx * w2 / 2, y2 + ny * w2 / 2); ctx.lineTo(x2 - nx * w2 / 2, y2 - ny * w2 / 2); ctx.lineTo(x1 - nx * w1 / 2, y1 - ny * w1 / 2); ctx.closePath(); ctx.fill(); ctx.stroke();
       ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.lineWidth = Math.max(1.5, (w1 + w2) * .09);   // highlight along the tube
       ctx.beginPath(); ctx.moveTo(x1 - nx * w1 * .2, y1 - ny * w1 * .2); ctx.lineTo(x2 - nx * w2 * .2, y2 - ny * w2 * .2); ctx.stroke();
-      ar.hits.push({ id, x1, y1, x2, y2, w: Math.max(w1, w2), a: vs[i - 1].id, b: vs[i].id });
+      ar.hits.push({ id, x1, y1, x2, y2, w: Math.max(w1, w2), a: single ? vs[0].id : vs[i - 1].id, b: single ? vs[0].id : vs[i].id });
     }
     pts.forEach(q => {                                            // joints + depth label
       if (q.p.zc <= NEAR) return;
       const x = sx(q.p), y = sy(q.p), w = clamp(dia * f / q.p.zc, 9, 70);
       ctx.fillStyle = col; ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, w / 2, 0, 7); ctx.fill(); ctx.stroke();
+      if (single) return;                                            // a stub is labelled once, at its middle (below)
       if (q.p.zc < 60 && x > 0 && x < W && y > 0 && y < H) {
         const t = `ลึก ${fmtDepth(q.d)}`; ctx.font = '600 13px Anuphan, system-ui, sans-serif'; ctx.textBaseline = 'middle';
         const tw = ctx.measureText(t).width, tx = x + w / 2 + 8 + tw > W - 6 ? x - w / 2 - 8 - tw : x + w / 2 + 8;   // keep the label on screen
         ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.strokeText(t, tx, y); ctx.fillStyle = '#fff'; ctx.fillText(t, tx, y);
       }
     });
+    if (single) {                                                    // depth label at the middle of the stub
+      const d0 = depthOf(vs[0]) ?? .6, cc = cam(vs[0], d0);
+      if (cc.zc > NEAR && cc.zc < 60) {
+        const x = sx(cc), y = sy(cc), t = `ลึก ${fmtDepth(d0)} · ท่อ`, w = clamp(dia * f / cc.zc, 9, 70);
+        ctx.font = '600 13px Anuphan, system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+        const ty = clamp(y - w / 2 - 14, 100, H - 120);
+        ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.strokeText(t, clamp(x, 70, W - 70), ty); ctx.fillStyle = '#fff'; ctx.fillText(t, clamp(x, 70, W - 70), ty); ctx.textAlign = 'start';
+      }
+    }
   });
 }
 // tap a pipe in the camera view to open it
@@ -887,7 +911,7 @@ function arFrame() {
     }
   }
   const S = ar.s, ready = !!S.F && ar.yawInit;
-  const camAz = ready ? norm(Math.atan2(S.F[0], S.F[1]) / RAD + ar.yawOff + cal.azOff) : null;
+  const camAz = ready ? norm(Math.atan2(S.F[0], S.F[1]) / RAD + ar.yawOff + cal.azOff) : null; ar.camAz = camAz;
   const gp = updateRef(now, dt);                              // frozen while standing still
   const eff = gp ? { lat: gp.lat + cal.dLat, lng: gp.lng + cal.dLng, acc: gp.acc } : null;
   $('arHead').textContent = camAz == null ? '--°' : `${Math.round(camAz)}° ${dirName(camAz)}`;
@@ -1018,7 +1042,7 @@ $('arShutter').onclick = async () => {
   const R0 = ar.ref, sp = shortPos();
   if (sp && L.latLng(sp.lat, sp.lng).distanceTo([R0.lat, R0.lng]) > 1.5) relockNow(); else ar.refT = -1e9;
   const R = ar.ref, aim = ar.aim && { dist: ar.aim.dist, lat: R.lat + cal.dLat + ar.aim.dist * Math.cos(ar.aim.brg * RAD) / 111320, lng: R.lng + cal.dLng + ar.aim.dist * Math.sin(ar.aim.brg * RAD) / (111320 * Math.cos(R.lat * RAD)) };
-  if (aim) pending = { lat: aim.lat, lng: aim.lng, acc: Math.hypot(R.acc, aim.dist * .12), source: `เล็งพื้น ~${aim.dist.toFixed(1)} ม.`, photo };
+  if (aim) pending = { lat: aim.lat, lng: aim.lng, acc: Math.hypot(R.acc, aim.dist * .12), source: `เล็งพื้น ~${aim.dist.toFixed(1)} ม.`, photo, dir: Math.round(ar.camAz ?? 0) };
   else { pending = { lat: R.lat + cal.dLat, lng: R.lng + cal.dLng, acc: R.acc, source: 'ตำแหน่งที่ยืน', photo }; toast('ไม่ได้เล็งพื้น · บันทึกตรงที่ยืน'); }
   openSave();
 };
