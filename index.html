@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <style>
   :root {
     --font: "Anuphan", system-ui, -apple-system, "Noto Sans Thai", sans-serif;
@@ -58,8 +59,6 @@
   .leaflet-control-attribution { font: 10px var(--font); background: color-mix(in oklab, var(--paper) 80%, transparent) !important; color: var(--ink-2); border-radius: 6px 6px 0 0; }
   .leaflet-control-attribution a { color: var(--ink-2); }
 
-  .tiles-street { filter: saturate(.8) contrast(.96) brightness(1.02); }
-  @media (prefers-color-scheme: dark) { .tiles-street { filter: invert(1) hue-rotate(180deg) saturate(.7) brightness(.92) contrast(.92); } }
 
   /* ---------- overlay chrome ---------- */
   .ui { position: fixed; z-index: 800; pointer-events: none; }
@@ -92,7 +91,7 @@
   .listbtn:active { transform: scale(.96); }
   body.sheet-open .bottom, body.sheet-open .side { transform: translateY(140%); opacity: 0; pointer-events: none; }
 
-  .coach { left: 12px; right: 12px; bottom: calc(96px + var(--safe-b)); max-width: 520px; margin: 0 auto; background: var(--paper); border-radius: 18px; box-shadow: var(--shadow); padding: 14px 16px; font-size: 14px; line-height: 1.45; color: var(--ink-2); display: none; }
+  .coach { left: 12px; right: 72px; bottom: calc(96px + var(--safe-b)); max-width: 520px; margin: 0 auto; background: var(--paper); border-radius: 18px; box-shadow: var(--shadow); padding: 14px 16px; font-size: 14px; line-height: 1.45; color: var(--ink-2); display: none; }
   .coach b { color: var(--ink); font-weight: 600; display: block; font-size: 15px; margin-bottom: 2px; }
   body.empty:not(.sheet-open):not(.picking-on) .coach { display: block; animation: rise .5s var(--ease) both; }
 
@@ -257,6 +256,8 @@
 </dialog>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/lite.umd.js"></script>
 <script>
 // ---------- helpers ----------
@@ -293,13 +294,15 @@ const DB = (() => {
 // ---------- Map ----------
 const map = L.map('map', { zoomControl: false, attributionControl: false, tapTolerance: 15 }).setView([13.7563, 100.5018], 13);
 L.control.attribution({ position: 'bottomleft', prefix: false }).addTo(map);
-const street = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, className: 'tiles-street', attribution: '© OpenStreetMap' });
+const OFM = 'https://tiles.openfreemap.org/styles/';
+const vec = {}; // vector basemaps, created on demand
+const vecLayer = name => vec[name] ??= L.maplibreGL({ style: OFM + name, attribution: '© OpenStreetMap · OpenFreeMap © OpenMapTiles' });
 const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: '© Esri' });
 const mq = matchMedia('(prefers-color-scheme: dark)');
-let useSat = false;
+let useSat = false, styleLight = 'positron', styleDark = 'dark';
 function applyBase() {
-  [street, sat].forEach(l => map.hasLayer(l) && map.removeLayer(l));
-  (useSat ? sat : street).addTo(map).bringToBack();
+  [sat, ...Object.values(vec)].forEach(l => map.hasLayer(l) && map.removeLayer(l));
+  (useSat ? sat : vecLayer(mq.matches ? styleDark : styleLight)).addTo(map);
 }
 applyBase(); mq.addEventListener('change', applyBase);
 $('btnSat').onclick = () => { useSat = !useSat; $('btnSat').setAttribute('aria-pressed', useSat); applyBase(); };
