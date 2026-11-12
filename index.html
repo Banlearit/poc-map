@@ -2,111 +2,280 @@
 <html lang="th">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>Pipe Pin Map</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e6f7e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>แผนที่จุดท่อ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
-  :root { --bg:#fff; --fg:#1b1f24; --muted:#6b7280; --accent:#0a7cff; --danger:#e5484d; --card:#f4f6f8; --border:#dde1e6; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#111418; --fg:#e8eaed; --muted:#9aa0a6; --card:#1c2128; --border:#2d333b; } }
-  * { box-sizing:border-box; }
-  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family:system-ui,-apple-system,"Sukhumvit Set","Noto Sans Thai",sans-serif; }
-  #app { display:flex; flex-direction:column; height:100%; }
-  header { display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--border); }
-  header h1 { font-size:16px; margin:0; flex:1; }
-  header small { color:var(--muted); }
-  #map { flex:1; min-height:0; }
-  .bar { display:flex; gap:8px; padding:10px 12px; border-top:1px solid var(--border); flex-wrap:wrap; }
-  button, .btn { appearance:none; border:1px solid var(--border); background:var(--card); color:var(--fg); padding:10px 14px; border-radius:10px; font-size:15px; cursor:pointer; }
-  .primary { background:var(--accent); border-color:var(--accent); color:#fff; flex:1; font-weight:600; }
-  .danger { color:var(--danger); }
-  #status { font-size:13px; color:var(--muted); padding:0 12px 8px; }
-  dialog { border:none; border-radius:14px; padding:0; width:min(420px, calc(100vw - 32px)); background:var(--bg); color:var(--fg); }
-  dialog::backdrop { background:rgba(0,0,0,.45); }
-  .dlg { padding:16px; display:flex; flex-direction:column; gap:10px; }
-  .dlg h2 { margin:0; font-size:17px; }
-  .dlg img { width:100%; max-height:220px; object-fit:cover; border-radius:10px; }
-  label { font-size:13px; color:var(--muted); display:flex; flex-direction:column; gap:4px; }
-  input, select, textarea { font:inherit; padding:9px 10px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--fg); }
-  .row { display:flex; gap:8px; }
-  .row > * { flex:1; }
-  .coord { font-size:12px; color:var(--muted); font-family:ui-monospace,monospace; }
-  .popup img { width:200px; max-width:100%; border-radius:8px; display:block; margin-bottom:6px; }
-  .popup b { font-size:14px; }
-  .popup .meta { font-size:12px; color:#555; }
-  #list { max-height:40vh; overflow:auto; }
-  .item { display:flex; gap:10px; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); cursor:pointer; }
-  .item img { width:52px; height:52px; object-fit:cover; border-radius:8px; }
-  .item div { font-size:14px; }
-  .item small { color:var(--muted); display:block; }
-  .hint { position:absolute; z-index:1000; top:64px; left:50%; transform:translateX(-50%); background:var(--accent); color:#fff; padding:8px 12px; border-radius:20px; font-size:13px; display:none; }
+  :root {
+    --font: "Anuphan", system-ui, -apple-system, "Noto Sans Thai", sans-serif;
+    --ink: oklch(0.22 0.025 235);
+    --ink-2: oklch(0.45 0.025 235);
+    --paper: oklch(0.995 0.003 235);
+    --paper-2: oklch(0.96 0.008 235);
+    --line: oklch(0.90 0.01 235);
+    --accent: oklch(0.50 0.105 215);
+    --accent-ink: oklch(0.99 0.01 215);
+    --accent-soft: oklch(0.94 0.04 215);
+    --danger: oklch(0.52 0.19 25);
+    --ok: oklch(0.58 0.14 155);
+    --warn: oklch(0.72 0.15 75);
+    --bad: oklch(0.58 0.2 25);
+    --shadow: 0 1px 2px oklch(0.2 0.03 235 / .12), 0 8px 24px -6px oklch(0.2 0.03 235 / .28);
+    --ease: cubic-bezier(.16, 1, .3, 1);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-t: env(safe-area-inset-top, 0px);
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: oklch(0.95 0.01 235);
+      --ink-2: oklch(0.74 0.02 235);
+      --paper: oklch(0.26 0.02 235);
+      --paper-2: oklch(0.31 0.022 235);
+      --line: oklch(0.38 0.02 235);
+      --accent: oklch(0.78 0.11 205);
+      --accent-ink: oklch(0.2 0.03 235);
+      --accent-soft: oklch(0.34 0.05 215);
+      --danger: oklch(0.75 0.15 25);
+      --shadow: 0 1px 2px oklch(0 0 0 / .4), 0 8px 24px -6px oklch(0 0 0 / .6);
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--paper-2); color: var(--ink); font-family: var(--font); overscroll-behavior: none; }
+  ::selection { background: var(--accent); color: var(--accent-ink); }
+  * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+  input, textarea, select { caret-color: var(--accent); accent-color: var(--accent); }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  #map { position: fixed; inset: 0; background: var(--paper-2); }
+  #map.picking { cursor: crosshair; }
+  .leaflet-control-attribution { font: 10px var(--font); background: color-mix(in oklab, var(--paper) 80%, transparent) !important; color: var(--ink-2); border-radius: 6px 6px 0 0; }
+  .leaflet-control-attribution a { color: var(--ink-2); }
+
+  .tiles-street { filter: saturate(.8) contrast(.96) brightness(1.02); }
+  @media (prefers-color-scheme: dark) { .tiles-street { filter: invert(1) hue-rotate(180deg) saturate(.7) brightness(.92) contrast(.92); } }
+
+  /* ---------- overlay chrome ---------- */
+  .ui { position: fixed; z-index: 800; pointer-events: none; }
+  .ui > * { pointer-events: auto; }
+  .top { top: calc(12px + var(--safe-t)); left: 12px; right: 12px; display: flex; gap: 8px; align-items: flex-start; justify-content: space-between; }
+  .pill { display: inline-flex; align-items: center; gap: 10px; background: var(--paper); border-radius: 999px; box-shadow: var(--shadow); padding: 8px 14px 8px 8px; min-height: 44px; }
+  .brand { width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; }
+  .brand .i { width: 17px; height: 17px; }
+  .pill h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -.01em; line-height: 1.1; }
+  .pill small { display: block; font-size: 12px; color: var(--ink-2); font-weight: 400; margin-top: 1px; font-variant-numeric: tabular-nums; }
+  .gps { padding: 0 14px; font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; border: 0; color: var(--ink); font-family: inherit; cursor: pointer; }
+  .gps i { width: 9px; height: 9px; border-radius: 50%; background: var(--ink-2); display: block; }
+  .gps[data-q=ok] i { background: var(--ok); outline: 4px solid color-mix(in oklab, var(--ok) 25%, transparent); }
+  .gps[data-q=mid] i { background: var(--warn); outline: 4px solid color-mix(in oklab, var(--warn) 30%, transparent); }
+  .gps[data-q=bad] i { background: var(--bad); outline: 4px solid color-mix(in oklab, var(--bad) 25%, transparent); }
+  .gps[data-q=search] i { animation: blink 1.1s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+
+  .side { right: 12px; bottom: calc(112px + var(--safe-b)); display: flex; flex-direction: column; gap: 10px; transition: transform .35s var(--ease), opacity .25s; }
+  .fab { width: 48px; height: 48px; border-radius: 16px; border: 0; background: var(--paper); color: var(--ink); box-shadow: var(--shadow); display: grid; place-items: center; cursor: pointer; transition: transform .15s var(--ease), background .15s; font-family: inherit; }
+  .fab:active { transform: scale(.94); }
+  .fab[aria-pressed=true] { background: var(--accent); color: var(--accent-ink); }
+
+  .bottom { left: 12px; right: 12px; bottom: calc(22px + var(--safe-b)); display: flex; gap: 10px; max-width: 520px; margin: 0 auto; transition: transform .35s var(--ease), opacity .25s; }
+  .shoot { flex: 1; height: 60px; border: 0; border-radius: 20px; background: var(--accent); color: var(--accent-ink); font: 600 17px var(--font); display: flex; align-items: center; justify-content: center; gap: 10px; box-shadow: var(--shadow); cursor: pointer; transition: transform .15s var(--ease), filter .15s; }
+  .shoot:hover { filter: brightness(1.06); }
+  .shoot:active { transform: scale(.975); }
+  .shoot .i { width: 26px; height: 26px; }
+  .listbtn { height: 60px; min-width: 60px; padding: 0 16px; border: 0; border-radius: 20px; background: var(--paper); color: var(--ink); box-shadow: var(--shadow); display: flex; align-items: center; gap: 8px; font: 600 15px var(--font); cursor: pointer; font-variant-numeric: tabular-nums; }
+  .listbtn:active { transform: scale(.96); }
+  body.sheet-open .bottom, body.sheet-open .side { transform: translateY(140%); opacity: 0; pointer-events: none; }
+
+  .coach { left: 12px; right: 12px; bottom: calc(96px + var(--safe-b)); max-width: 520px; margin: 0 auto; background: var(--paper); border-radius: 18px; box-shadow: var(--shadow); padding: 14px 16px; font-size: 14px; line-height: 1.45; color: var(--ink-2); display: none; }
+  .coach b { color: var(--ink); font-weight: 600; display: block; font-size: 15px; margin-bottom: 2px; }
+  body.empty:not(.sheet-open):not(.picking-on) .coach { display: block; animation: rise .5s var(--ease) both; }
+
+  .banner { top: calc(68px + var(--safe-t)); left: 12px; right: 12px; margin: 0 auto; max-width: 460px; display: none; }
+  .banner div { background: var(--ink); color: var(--paper); border-radius: 16px; padding: 10px 10px 10px 16px; display: flex; align-items: center; gap: 12px; font-size: 14px; font-weight: 500; box-shadow: var(--shadow); }
+  .banner span { flex: 1; }
+  .banner button { border: 0; background: color-mix(in oklab, var(--paper) 22%, transparent); color: inherit; border-radius: 10px; padding: 8px 12px; font: 600 13px var(--font); cursor: pointer; }
+  body.picking-on .banner { display: block; animation: rise .35s var(--ease) both; }
+  body.picking-on .bottom, body.picking-on .side { opacity: .35; pointer-events: none; }
+
+  .toast { top: calc(68px + var(--safe-t)); left: 0; right: 0; display: flex; justify-content: center; }
+  .toast div { background: var(--ink); color: var(--paper); font-size: 14px; font-weight: 500; padding: 10px 16px; border-radius: 999px; box-shadow: var(--shadow); opacity: 0; transform: translateY(-8px); transition: opacity .25s, transform .35s var(--ease); }
+  .toast div.on { opacity: 1; transform: none; }
+  @keyframes rise { from { opacity: 0; transform: translateY(12px); } }
+
+  /* ---------- sheets ---------- */
+  .sheet { background: var(--paper); color: var(--ink); border-radius: 26px 26px 0 0; box-shadow: 0 -2px 4px oklch(0.2 0.03 235 / .08), 0 -16px 48px -12px oklch(0.2 0.03 235 / .35); }
+  .grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 10px auto 2px; }
+  .sheet h2 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -.015em; }
+
+  #detail { position: fixed; z-index: 900; left: 0; right: 0; bottom: 0; max-width: 520px; margin: 0 auto; max-height: 82dvh; overflow: auto; transform: translateY(105%); transition: transform .4s var(--ease); padding: 0 18px calc(18px + var(--safe-b)); }
+  #detail.on { transform: none; }
+  .d-head { display: flex; align-items: center; gap: 10px; padding: 8px 0 12px; }
+  .d-head h2 { flex: 1; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+  .icon-btn { width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--paper-2); color: var(--ink); display: grid; place-items: center; cursor: pointer; flex: none; }
+  .icon-btn:hover { background: var(--line); }
+  .d-photo { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 18px; display: block; background: var(--paper-2); margin-bottom: 14px; }
+  .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .fact { background: var(--paper-2); border-radius: 14px; padding: 10px 12px; }
+  .fact span { display: block; font-size: 12px; color: var(--ink-2); }
+  .fact b { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .note { font-size: 15px; line-height: 1.5; margin: 0 0 12px; white-space: pre-wrap; }
+  .meta { font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; margin-bottom: 16px; line-height: 1.5; }
+  .actions { display: flex; gap: 8px; }
+  .btn { height: 52px; border-radius: 16px; border: 0; padding: 0 18px; font: 600 15px var(--font); display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; background: var(--paper-2); color: var(--ink); text-decoration: none; transition: transform .15s var(--ease), background .15s; }
+  .btn:active { transform: scale(.97); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); flex: 1; }
+  .btn.danger { color: var(--danger); }
+  .btn.danger.arm { background: var(--danger); color: var(--paper); }
+
+  dialog { border: 0; padding: 0; margin: auto auto 0; width: 100%; max-width: 520px; max-height: 92dvh; background: transparent; color: var(--ink); overflow: visible; }
+  dialog[open] { animation: slideUp .4s var(--ease); }
+  dialog::backdrop { background: oklch(0.15 0.03 235 / .5); animation: fade .3s; }
+  @keyframes slideUp { from { transform: translateY(100%); } }
+  @keyframes fade { from { opacity: 0; } }
+  .dlg { padding: 0 18px calc(18px + var(--safe-b)); display: flex; flex-direction: column; gap: 14px; max-height: 92dvh; overflow: auto; }
+  .dlg header { display: flex; align-items: center; gap: 10px; padding-top: 6px; }
+  .dlg header h2 { flex: 1; }
+  .shot { display: flex; gap: 12px; align-items: center; }
+  .shot img { width: 76px; height: 76px; object-fit: cover; border-radius: 14px; flex: none; }
+  .where { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; line-height: 1.5; }
+  .where b { color: var(--ink); font-weight: 600; display: block; font-size: 14px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { position: relative; }
+  .chip input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .chip span { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 14px; border-radius: 999px; background: var(--paper-2); font-size: 14.5px; font-weight: 500; border: 2px solid transparent; transition: background .15s, border-color .15s; }
+  .chip input:checked + span { background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
+  .chip input:focus-visible + span { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500; color: var(--ink-2); }
+  .field input, .field textarea { font: 400 16px var(--font); color: var(--ink); background: var(--paper-2); border: 2px solid transparent; border-radius: 14px; padding: 12px 14px; width: 100%; resize: none; }
+  .field input::placeholder, .field textarea::placeholder { color: var(--ink-2); }
+  .field input:focus, .field textarea:focus { outline: none; border-color: var(--accent); background: var(--paper); }
+  .two { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; }
+  .foot { display: flex; gap: 8px; }
+
+  /* list */
+  .filters { display: flex; gap: 8px; overflow-x: auto; margin: 0 -18px; padding: 2px 18px 4px; scrollbar-width: none; }
+  .filters button { flex: none; height: 38px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--paper-2); color: var(--ink); font: 500 14px var(--font); display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+  .filters button[aria-pressed=true] { background: var(--ink); color: var(--paper); }
+  #list { overflow: auto; max-height: 46dvh; margin: 0 -18px; padding: 0 10px; }
+  .item { display: flex; gap: 12px; align-items: center; padding: 8px; border-radius: 16px; cursor: pointer; border: 0; background: none; width: 100%; text-align: left; font-family: inherit; color: inherit; }
+  .item:hover, .item:focus-visible { background: var(--paper-2); }
+  .item .th { width: 56px; height: 56px; border-radius: 12px; object-fit: cover; background: var(--paper-2); flex: none; display: grid; place-items: center; color: var(--ink-2); }
+  .item .tx { flex: 1; min-width: 0; }
+  .item b { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  .item p { margin: 2px 0 0; font-size: 13.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .dist { font-size: 13px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; flex: none; }
+  .empty-list { text-align: center; padding: 28px 12px; color: var(--ink-2); font-size: 14.5px; line-height: 1.5; }
+
+  /* map pins */
+  .pin { transition: transform .25s var(--ease); transform-origin: 50% 100%; filter: drop-shadow(0 3px 3px oklch(0.2 0.03 235 / .35)); }
+  .pin.sel { transform: scale(1.3); z-index: 999 !important; }
+  .me-ring { animation: ring 2.4s ease-out infinite; transform-origin: center; transform-box: fill-box; }
+  @keyframes ring { 0% { opacity: .5; transform: scale(.6); } 100% { opacity: 0; transform: scale(1.8); } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 </style>
 </head>
-<body>
-<div id="app">
-  <header>
-    <h1>🔧 แผนที่จุดวางท่อ <small id="count"></small></h1>
-    <button id="btnList">รายการ</button>
-  </header>
-  <div class="hint" id="hint">แตะบนแผนที่เพื่อวางหมุด</div>
-  <div id="map"></div>
-  <div class="bar">
-    <button class="primary" id="btnShot">📷 ถ่ายรูป + ปักหมุด</button>
-    <button id="btnLocate" title="ตำแหน่งฉัน">📍</button>
-    <button id="btnManual" title="ปักหมุดเองบนแผนที่">✋</button>
+<body class="empty">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-cam" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+    <symbol id="i-loc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9.5 5L12 13 2.5 8z"/><path d="m2.5 12.5 9.5 5 9.5-5"/><path d="m2.5 17 9.5 5 9.5-5"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></symbol>
+    <symbol id="i-nav" viewBox="0 0 24 24"><path d="m3 11 19-9-9 19-2-8z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5M5 21h14"/></symbol>
+    <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 2.5s6.5 7 6.5 11.5a6.5 6.5 0 0 1-13 0C5.5 9.500 12 2.500 12 2.500z"/></symbol>
+  </defs>
+</svg>
+
+<div id="map"></div>
+
+<div class="ui top">
+  <div class="pill">
+    <span class="brand"><svg class="i"><use href="#i-drop"/></svg></span>
+    <div><h1>แผนที่จุดท่อ</h1><small id="count">ยังไม่มีจุด</small></div>
   </div>
-  <div id="status">กำลังขอตำแหน่ง GPS…</div>
+  <button class="pill gps" id="gps" data-q="search" aria-label="ตำแหน่งของฉัน"><i></i><span id="gpsText">หาตำแหน่ง…</span></button>
 </div>
+
+<div class="ui banner"><div><span id="bannerText">แตะบนแผนที่ตรงจุดที่วางท่อ</span><button id="bannerCancel">ยกเลิก</button></div></div>
+<div class="ui toast" role="status" aria-live="polite"><div id="toast"></div></div>
+
+<div class="ui coach"><b>เริ่มจากจุดแรก</b>ยืนตรงจุดที่วางท่อแล้วกดถ่ายรูป ระบบจะจำตำแหน่งให้เอง</div>
+
+<div class="ui side">
+  <button class="fab" id="btnLocate" aria-label="ไปที่ตำแหน่งของฉัน"><svg class="i"><use href="#i-loc"/></svg></button>
+  <button class="fab" id="btnSat" aria-label="ภาพดาวเทียม" aria-pressed="false"><svg class="i"><use href="#i-layers"/></svg></button>
+  <button class="fab" id="btnManual" aria-label="ปักหมุดเองบนแผนที่"><svg class="i"><use href="#i-pin"/></svg></button>
+</div>
+
+<div class="ui bottom">
+  <button class="shoot" id="btnShot"><svg class="i"><use href="#i-cam"/></svg>ถ่ายรูป + ปักหมุด</button>
+  <button class="listbtn" id="btnList" aria-label="รายการจุดทั้งหมด"><svg class="i"><use href="#i-list"/></svg><span id="listCount">0</span></button>
+</div>
+
+<aside id="detail" class="sheet" aria-live="polite"></aside>
 
 <input type="file" id="file" accept="image/*" capture="environment" hidden>
 
 <dialog id="dlgSave">
-  <form class="dlg" method="dialog" id="formSave">
-    <h2>บันทึกจุดท่อ</h2>
-    <img id="preview" alt="">
-    <div class="coord" id="coordText"></div>
-    <div class="row">
-      <label>ประเภท
-        <select name="type">
-          <option>จุดเจาะท่อ</option>
-          <option>ข้อต่อ</option>
-          <option>วาล์ว</option>
-          <option>ท่อเมน</option>
-          <option>มิเตอร์</option>
-          <option>อื่น ๆ</option>
-        </select>
-      </label>
-      <label>ความลึก (ซม.)
-        <input name="depth" type="number" inputmode="numeric" placeholder="เช่น 40">
-      </label>
+  <form class="dlg sheet" method="dialog" id="formSave">
+    <div class="grab"></div>
+    <header><h2>บันทึกจุดท่อ</h2><button class="icon-btn" value="cancel" aria-label="ปิด" formnovalidate><svg class="i"><use href="#i-x"/></svg></button></header>
+    <div class="shot"><img id="preview" alt="รูปที่ถ่าย" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="><div class="where" id="coordText"></div></div>
+    <div class="chips" id="typeChips" role="radiogroup" aria-label="ประเภท"></div>
+    <div class="two">
+      <label class="field">ความลึก (ซม.)<input name="depth" type="number" inputmode="numeric" placeholder="40"></label>
+      <label class="field">ขนาด / วัสดุท่อ<input name="pipe" placeholder="PVC 1 นิ้ว"></label>
     </div>
-    <label>ขนาดท่อ / วัสดุ
-      <input name="pipe" placeholder="เช่น PVC 1 นิ้ว">
-    </label>
-    <label>บันทึก
-      <textarea name="note" rows="2" placeholder="เช่น หน้าบ้านเลขที่ 12 ห่างรั้ว 1 เมตร"></textarea>
-    </label>
-    <div class="row">
-      <button value="cancel" type="submit">ยกเลิก</button>
-      <button value="ok" class="primary" type="submit">บันทึก</button>
-    </div>
+    <label class="field">บันทึกช่วยจำ<textarea name="note" rows="2" placeholder="เช่น หน้าบ้านเลขที่ 12 ห่างรั้ว 1 เมตร"></textarea></label>
+    <div class="foot"><button class="btn primary" value="ok">บันทึกจุดนี้</button></div>
   </form>
 </dialog>
 
 <dialog id="dlgList">
-  <div class="dlg">
-    <h2>จุดที่บันทึกไว้</h2>
+  <div class="dlg sheet">
+    <div class="grab"></div>
+    <header><h2 id="listTitle">จุดที่บันทึกไว้</h2><button class="icon-btn" id="listClose" aria-label="ปิด"><svg class="i"><use href="#i-x"/></svg></button></header>
+    <div class="filters" id="filters"></div>
     <div id="list"></div>
-    <div class="row">
-      <button id="btnExport">⬇️ Export</button>
-      <label class="btn" style="flex-direction:row;justify-content:center;color:var(--fg)">⬆️ Import<input type="file" id="importFile" accept="application/json" hidden></label>
+    <div class="foot">
+      <button class="btn" id="btnExport" style="flex:1"><svg class="i"><use href="#i-down"/></svg>สำรองข้อมูล</button>
+      <label class="btn" style="flex:1"><svg class="i"><use href="#i-up"/></svg>นำเข้า<input type="file" id="importFile" accept="application/json" hidden></label>
     </div>
-    <button onclick="this.closest('dialog').close()">ปิด</button>
   </div>
 </dialog>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/lite.umd.js"></script>
 <script>
+// ---------- helpers ----------
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const TYPES = [
+  { k: 'จุดเจาะท่อ', c: 'oklch(0.58 0.2 25)' },
+  { k: 'ข้อต่อ',     c: 'oklch(0.72 0.16 70)' },
+  { k: 'วาล์ว',      c: 'oklch(0.6 0.14 155)' },
+  { k: 'ท่อเมน',     c: 'oklch(0.55 0.17 255)' },
+  { k: 'มิเตอร์',    c: 'oklch(0.55 0.18 305)' },
+  { k: 'อื่น ๆ',      c: 'oklch(0.55 0.02 235)' },
+];
+const colorOf = t => (TYPES.find(x => x.k === t) || TYPES[5]).c;
+const fmtDate = iso => new Date(iso).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+const fmtDist = m => m < 1000 ? `${Math.round(m)} ม.` : `${(m / 1000).toFixed(1)} กม.`;
+let toastT;
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2400); }
+
 // ---------- IndexedDB ----------
 const DB = (() => {
   let dbp;
@@ -116,50 +285,49 @@ const DB = (() => {
     r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
   });
   const tx = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => {
-    const t = db.transaction('pins', mode); const s = t.objectStore('pins'); const out = fn(s);
+    const t = db.transaction('pins', mode); const out = fn(t.objectStore('pins'));
     t.oncomplete = () => res(out?.result ?? out); t.onerror = () => rej(t.error); }); };
-  return {
-    all: () => tx('readonly', s => s.getAll()),
-    put: p => tx('readwrite', s => s.put(p)),
-    del: id => tx('readwrite', s => s.delete(id)),
-  };
+  return { all: () => tx('readonly', s => s.getAll()), put: p => tx('readwrite', s => s.put(p)), del: id => tx('readwrite', s => s.delete(id)) };
 })();
 
 // ---------- Map ----------
-const map = L.map('map', { zoomControl: true }).setView([13.7563, 100.5018], 13);
-const street = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
+const map = L.map('map', { zoomControl: false, attributionControl: false, tapTolerance: 15 }).setView([13.7563, 100.5018], 13);
+L.control.attribution({ position: 'bottomleft', prefix: false }).addTo(map);
+const street = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, className: 'tiles-street', attribution: '© OpenStreetMap' });
 const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: '© Esri' });
-street.addTo(map);
-L.control.layers({ 'แผนที่': street, 'ดาวเทียม': sat }).addTo(map);
+const mq = matchMedia('(prefers-color-scheme: dark)');
+let useSat = false;
+function applyBase() {
+  [street, sat].forEach(l => map.hasLayer(l) && map.removeLayer(l));
+  (useSat ? sat : street).addTo(map).bringToBack();
+}
+applyBase(); mq.addEventListener('change', applyBase);
+$('btnSat').onclick = () => { useSat = !useSat; $('btnSat').setAttribute('aria-pressed', useSat); applyBase(); };
 
-const $ = id => document.getElementById(id);
-const statusEl = $('status');
-let me = null, meMarker = null, meCircle = null;
-const markers = new Map();
+const markers = new Map(), pinData = new Map();
+let me = null, meMarker = null, meCircle = null, selected = null;
 
 // ---------- GPS ----------
 function onPos(p) {
   me = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy };
-  statusEl.textContent = `GPS: ${me.lat.toFixed(6)}, ${me.lng.toFixed(6)} (แม่นยำ ±${Math.round(me.acc)} ม.)`;
+  const q = me.acc <= 10 ? 'ok' : me.acc <= 30 ? 'mid' : 'bad';
+  $('gps').dataset.q = q; $('gpsText').textContent = `±${Math.round(me.acc)} ม.`;
   if (!meMarker) {
-    meMarker = L.circleMarker([me.lat, me.lng], { radius: 7, color: '#fff', weight: 2, fillColor: '#0a7cff', fillOpacity: 1 }).addTo(map);
-    meCircle = L.circle([me.lat, me.lng], { radius: me.acc, color: '#0a7cff', weight: 1, fillOpacity: .1 }).addTo(map);
+    meCircle = L.circle([me.lat, me.lng], { radius: me.acc, color: '#0b7a8a', weight: 1, fillOpacity: .1, interactive: false }).addTo(map);
+    meMarker = L.marker([me.lat, me.lng], { interactive: false, zIndexOffset: 500, icon: L.divIcon({ className: '', iconSize: [28, 28], iconAnchor: [14, 14],
+      html: '<svg viewBox="0 0 28 28" width="28" height="28"><circle class="me-ring" cx="14" cy="14" r="13" fill="#0b7a8a"/><circle cx="14" cy="14" r="8" fill="#fff"/><circle cx="14" cy="14" r="5.5" fill="#0b7a8a"/></svg>' }) }).addTo(map);
     if (!markers.size) map.setView([me.lat, me.lng], 18);
-  } else {
-    meMarker.setLatLng([me.lat, me.lng]); meCircle.setLatLng([me.lat, me.lng]).setRadius(me.acc);
-  }
+  } else { meMarker.setLatLng([me.lat, me.lng]); meCircle.setLatLng([me.lat, me.lng]).setRadius(me.acc); }
 }
-function onPosErr(e) { statusEl.textContent = `ใช้ GPS ไม่ได้: ${e.message} — ใช้ปุ่ม ✋ ปักหมุดเองได้`; }
-if ('geolocation' in navigator) {
-  navigator.geolocation.watchPosition(onPos, onPosErr, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
-} else onPosErr({ message: 'อุปกรณ์ไม่รองรับ' });
-
+function onPosErr(e) { $('gps').dataset.q = 'bad'; $('gpsText').textContent = 'ไม่มี GPS'; if (e.code === 1) toast('ยังไม่ได้อนุญาตตำแหน่ง · ใช้ปุ่มปักหมุดเองได้'); }
+if ('geolocation' in navigator) navigator.geolocation.watchPosition(onPos, onPosErr, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+else onPosErr({});
 const getFreshPos = () => new Promise(res => {
   if (!navigator.geolocation) return res(me);
-  navigator.geolocation.getCurrentPosition(
-    p => { onPos(p); res(me); }, () => res(me),
-    { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+  navigator.geolocation.getCurrentPosition(p => { onPos(p); res(me); }, () => res(me), { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
 });
+$('btnLocate').onclick = () => me ? map.flyTo([me.lat, me.lng], Math.max(map.getZoom(), 18), { duration: .6 }) : getFreshPos();
+$('gps').onclick = $('btnLocate').onclick;
 
 // ---------- Photo ----------
 async function compress(file, max = 1280) {
@@ -169,92 +337,137 @@ async function compress(file, max = 1280) {
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
   return c.toDataURL('image/jpeg', 0.75);
 }
-
-let pending = null; // {lat,lng,acc,source,photo}
+let pending = null;
 
 $('btnShot').onclick = () => $('file').click();
 $('file').onchange = async e => {
   const f = e.target.files[0]; e.target.value = '';
   if (!f) return;
-  statusEl.textContent = 'กำลังอ่านรูปและตำแหน่ง…';
-  // 1) Prefer GPS embedded in the photo (EXIF) — works for gallery photos too
+  toast('กำลังอ่านรูปและตำแหน่ง…');
   let loc = null;
-  try { const g = await exifr.gps(f); if (g?.latitude) loc = { lat: g.latitude, lng: g.longitude, acc: null, source: 'EXIF รูปภาพ' }; } catch {}
-  // 2) Otherwise use the phone's current GPS
+  try { const g = await exifr.gps(f); if (g?.latitude) loc = { lat: g.latitude, lng: g.longitude, acc: null, source: 'GPS ในรูป' }; } catch {}
   if (!loc) { const p = await getFreshPos(); if (p) loc = { ...p, source: 'GPS มือถือ' }; }
   const photo = await compress(f);
-  if (!loc) { pending = { photo }; startManual('ไม่พบตำแหน่ง — แตะบนแผนที่ตรงจุดที่วางท่อ'); return; }
+  if (!loc) { pending = { photo }; startManual('ไม่พบตำแหน่ง · แตะแผนที่ตรงจุดที่วางท่อ'); return; }
   pending = { ...loc, photo }; openSave();
 };
 
-// Manual placement (tap on map)
+// manual placement
 let manual = false;
-function startManual(msg = 'แตะบนแผนที่เพื่อวางหมุด') { manual = true; $('hint').textContent = msg; $('hint').style.display = 'block'; }
+function startManual(msg = 'แตะบนแผนที่ตรงจุดที่วางท่อ') {
+  manual = true; closeDetail(); $('bannerText').textContent = msg;
+  document.body.classList.add('picking-on'); $('map').classList.add('picking');
+}
+function stopManual() { manual = false; document.body.classList.remove('picking-on'); $('map').classList.remove('picking'); }
 $('btnManual').onclick = () => { pending = { photo: null }; startManual(); };
+$('bannerCancel').onclick = () => { stopManual(); pending = null; };
 map.on('click', e => {
-  if (!manual) return;
-  manual = false; $('hint').style.display = 'none';
-  pending = { ...pending, lat: e.latlng.lat, lng: e.latlng.lng, acc: null, source: 'ปักหมุดเอง' };
-  openSave();
+  if (manual) { stopManual(); pending = { ...pending, lat: e.latlng.lat, lng: e.latlng.lng, acc: null, source: 'ปักเองบนแผนที่' }; openSave(); }
+  else closeDetail();
 });
 
+// ---------- Save sheet ----------
+$('typeChips').innerHTML = TYPES.map((t, i) => `<label class="chip"><input type="radio" name="type" value="${t.k}" ${i ? '' : 'checked'}><span><i class="dot" style="background:${t.c}"></i>${t.k}</span></label>`).join('');
 function openSave() {
-  $('preview').style.display = pending.photo ? 'block' : 'none';
-  if (pending.photo) $('preview').src = pending.photo;
-  $('coordText').textContent = `${pending.lat.toFixed(6)}, ${pending.lng.toFixed(6)} · ${pending.source}` + (pending.acc ? ` ±${Math.round(pending.acc)} ม.` : '');
   $('formSave').reset();
+  const img = $('preview'); img.style.display = pending.photo ? '' : 'none'; if (pending.photo) img.src = pending.photo;
+  $('coordText').innerHTML = `<b>${esc(pending.source)}${pending.acc ? ` · ±${Math.round(pending.acc)} ม.` : ''}</b>${pending.lat.toFixed(6)}, ${pending.lng.toFixed(6)}`;
+  document.body.classList.add('sheet-open');
   $('dlgSave').showModal();
 }
-
-$('dlgSave').onclose = async () => {
+$('dlgSave').addEventListener('close', async () => {
+  document.body.classList.remove('sheet-open');
   if ($('dlgSave').returnValue !== 'ok' || !pending) { pending = null; return; }
   const fd = new FormData($('formSave'));
   const pin = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), ...pending,
     type: fd.get('type'), depth: fd.get('depth'), pipe: fd.get('pipe'), note: fd.get('note') };
   pending = null;
-  await DB.put(pin); addMarker(pin, true); updateCount();
-  statusEl.textContent = 'บันทึกแล้ว ✅';
-};
-
-// ---------- Markers ----------
-const colors = { 'จุดเจาะท่อ': '#e5484d', 'ข้อต่อ': '#f59e0b', 'วาล์ว': '#10b981', 'ท่อเมน': '#0a7cff', 'มิเตอร์': '#8b5cf6' };
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-function popupHtml(p) {
-  const d = new Date(p.createdAt).toLocaleString('th-TH');
-  return `<div class="popup">${p.photo ? `<img src="${p.photo}">` : ''}
-    <b>${esc(p.type)}</b>${p.depth ? ` · ลึก ${esc(p.depth)} ซม.` : ''}<br>
-    ${p.pipe ? esc(p.pipe) + '<br>' : ''}${p.note ? esc(p.note) + '<br>' : ''}
-    <div class="meta">${d}<br>${p.lat.toFixed(6)}, ${p.lng.toFixed(6)} (${esc(p.source)})</div>
-    <a target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}">🧭 นำทางไปจุดนี้</a> ·
-    <a href="#" data-del="${p.id}" style="color:#e5484d">ลบ</a></div>`;
-}
-function addMarker(p, open) {
-  const m = L.circleMarker([p.lat, p.lng], { radius: 10, color: '#fff', weight: 2, fillColor: colors[p.type] || '#6b7280', fillOpacity: .95 })
-    .bindPopup(popupHtml(p)).addTo(map);
-  markers.set(p.id, m);
-  if (open) { map.setView([p.lat, p.lng], Math.max(map.getZoom(), 18)); m.openPopup(); }
-}
-map.on('popupopen', e => {
-  const a = e.popup.getElement().querySelector('[data-del]');
-  if (a) a.onclick = async ev => { ev.preventDefault();
-    if (!confirm('ลบจุดนี้?')) return;
-    const id = a.dataset.del; await DB.del(id); markers.get(id)?.remove(); markers.delete(id); updateCount(); };
+  await DB.put(pin); addMarker(pin); refresh(); select(pin.id, true); toast('บันทึกแล้ว');
 });
-const updateCount = () => $('count').textContent = markers.size ? `(${markers.size} จุด)` : '';
 
-$('btnLocate').onclick = () => me ? map.setView([me.lat, me.lng], 18) : getFreshPos();
+// ---------- Markers + detail ----------
+const pinIcon = (type, sel) => L.divIcon({ className: '', iconSize: [34, 42], iconAnchor: [17, 41],
+  html: `<svg class="pin ${sel ? 'sel' : ''}" viewBox="0 0 34 42" width="34" height="42"><path d="M17 41S3.500 26 3.500 16a13.500 13.500 0 0 1 27 0C30.500 26 17 41 17 41z" fill="${colorOf(type)}" stroke="#fff" stroke-width="2.500"/><circle cx="17" cy="16" r="5.500" fill="#fff"/></svg>` });
+function addMarker(p) {
+  pinData.set(p.id, p);
+  const m = L.marker([p.lat, p.lng], { icon: pinIcon(p.type), riseOnHover: true, keyboard: true, title: p.type }).addTo(map);
+  m.on('click', e => { L.DomEvent.stop(e); select(p.id, false); });
+  markers.set(p.id, m);
+}
+function select(id, fly) {
+  if (selected && markers.has(selected)) markers.get(selected).setIcon(pinIcon(pinData.get(selected).type, false));
+  selected = id; const p = pinData.get(id), m = markers.get(id);
+  m.setIcon(pinIcon(p.type, true));
+  openDetail(p);
+  const target = map.project(m.getLatLng(), Math.max(map.getZoom(), fly ? 18 : 0)).add([0, innerHeight * 0.2]);
+  map.flyTo(map.unproject(target, Math.max(map.getZoom(), fly ? 18 : 0)), Math.max(map.getZoom(), fly ? 18 : map.getZoom()), { duration: .5 });
+}
+function openDetail(p) {
+  const d = $('detail');
+  const dist = me ? fmtDist(L.latLng(me.lat, me.lng).distanceTo([p.lat, p.lng])) : null;
+  d.innerHTML = `<div class="grab"></div>
+    <div class="d-head"><span class="dot" style="background:${colorOf(p.type)}"></span><h2>${esc(p.type)}</h2>
+      <button class="icon-btn" id="dClose" aria-label="ปิด"><svg class="i"><use href="#i-x"/></svg></button></div>
+    ${p.photo ? `<img class="d-photo" src="${p.photo}" alt="รูปจุด${esc(p.type)}">` : ''}
+    ${(p.depth || p.pipe || dist) ? `<div class="facts">
+      ${p.depth ? `<div class="fact"><span>ความลึก</span><b>${esc(p.depth)} ซม.</b></div>` : ''}
+      ${p.pipe ? `<div class="fact"><span>ท่อ</span><b>${esc(p.pipe)}</b></div>` : ''}
+      ${dist ? `<div class="fact"><span>ห่างจากคุณ</span><b>${dist}</b></div>` : ''}</div>` : ''}
+    ${p.note ? `<p class="note">${esc(p.note)}</p>` : ''}
+    <div class="meta">${fmtDate(p.createdAt)}<br>${p.lat.toFixed(6)}, ${p.lng.toFixed(6)} · ${esc(p.source)}</div>
+    <div class="actions">
+      <a class="btn primary" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}"><svg class="i"><use href="#i-nav"/></svg>นำทางไปจุดนี้</a>
+      <button class="btn danger" id="dDel" aria-label="ลบจุดนี้"><svg class="i"><use href="#i-trash"/></svg></button>
+    </div>`;
+  d.scrollTop = 0; d.classList.add('on'); document.body.classList.add('sheet-open');
+  $('dClose').onclick = closeDetail;
+  let armT; const del = $('dDel');
+  del.onclick = async () => {
+    if (!del.classList.contains('arm')) {
+      del.classList.add('arm'); del.innerHTML = 'ยืนยันลบ'; armT = setTimeout(() => { del.classList.remove('arm'); del.innerHTML = '<svg class="i"><use href="#i-trash"/></svg>'; }, 3000); return; }
+    clearTimeout(armT);
+    await DB.del(p.id); markers.get(p.id).remove(); markers.delete(p.id); pinData.delete(p.id); selected = null;
+    closeDetail(); refresh(); toast('ลบแล้ว');
+  };
+}
+function closeDetail() {
+  $('detail').classList.remove('on');
+  if (!$('dlgSave').open && !$('dlgList').open) document.body.classList.remove('sheet-open');
+  if (selected && markers.has(selected)) markers.get(selected).setIcon(pinIcon(pinData.get(selected).type, false));
+  selected = null;
+}
 
-// ---------- List / export ----------
-$('btnList').onclick = async () => {
-  const pins = (await DB.all()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  $('list').innerHTML = pins.length ? pins.map(p => `<div class="item" data-id="${p.id}">
-    ${p.photo ? `<img src="${p.photo}">` : '<div style="width:52px;height:52px;border-radius:8px;background:var(--card)"></div>'}
-    <div>${esc(p.type)} ${p.note ? '· ' + esc(p.note) : ''}<small>${new Date(p.createdAt).toLocaleString('th-TH')}</small></div></div>`).join('')
-    : '<p style="color:var(--muted)">ยังไม่มีจุด — กด 📷 เพื่อเริ่ม</p>';
-  $('list').querySelectorAll('.item').forEach(el => el.onclick = () => {
-    $('dlgList').close(); const m = markers.get(el.dataset.id); map.setView(m.getLatLng(), 19); m.openPopup(); });
-  $('dlgList').showModal();
-};
+function refresh() {
+  const n = markers.size;
+  $('count').textContent = n ? `${n} จุดที่บันทึกไว้` : 'ยังไม่มีจุด';
+  $('listCount').textContent = n;
+  document.body.classList.toggle('empty', n === 0);
+}
+
+// ---------- List ----------
+let filter = null;
+function renderList() {
+  const counts = {}; pinData.forEach(p => counts[p.type] = (counts[p.type] || 0) + 1);
+  $('filters').innerHTML = `<button aria-pressed="${!filter}" data-k="">ทั้งหมด ${pinData.size}</button>` +
+    TYPES.filter(t => counts[t.k]).map(t => `<button aria-pressed="${filter === t.k}" data-k="${t.k}"><i class="dot" style="background:${t.c}"></i>${t.k} ${counts[t.k]}</button>`).join('');
+  $('filters').querySelectorAll('button').forEach(b => b.onclick = () => { filter = b.dataset.k || null; renderList(); });
+  const here = me ? L.latLng(me.lat, me.lng) : null;
+  let pins = [...pinData.values()].filter(p => !filter || p.type === filter).map(p => ({ p, d: here ? here.distanceTo([p.lat, p.lng]) : null }));
+  pins.sort((a, b) => here ? a.d - b.d : b.p.createdAt.localeCompare(a.p.createdAt));
+  $('listTitle').textContent = here ? 'จุดใกล้คุณ' : 'จุดที่บันทึกไว้';
+  $('list').innerHTML = pins.length ? pins.map(({ p, d }) => `<button class="item" data-id="${p.id}">
+    ${p.photo ? `<img class="th" src="${p.photo}" alt="">` : `<span class="th"><svg class="i"><use href="#i-pin"/></svg></span>`}
+    <span class="tx"><b><i class="dot" style="background:${colorOf(p.type)}"></i>${esc(p.type)}</b><p>${esc(p.note || p.pipe || fmtDate(p.createdAt))}</p></span>
+    ${d != null ? `<span class="dist">${fmtDist(d)}</span>` : ''}</button>`).join('')
+    : `<div class="empty-list">ยังไม่มีจุดในรายการนี้<br>กดถ่ายรูปที่หน้าแผนที่เพื่อเริ่มบันทึก</div>`;
+  $('list').querySelectorAll('.item').forEach(el => el.onclick = () => { $('dlgList').close(); select(el.dataset.id, true); });
+}
+$('btnList').onclick = () => { renderList(); document.body.classList.add('sheet-open'); $('dlgList').showModal(); };
+$('listClose').onclick = () => $('dlgList').close();
+$('dlgList').addEventListener('close', () => { if (!$('detail').classList.contains('on')) document.body.classList.remove('sheet-open'); });
+// tap on backdrop closes sheets
+['dlgList', 'dlgSave'].forEach(id => $(id).addEventListener('click', e => { if (e.target.id === id) $(id).close(id === 'dlgSave' ? 'cancel' : ''); }));
+
 $('btnExport').onclick = async () => {
   const blob = new Blob([JSON.stringify(await DB.all())], { type: 'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -262,15 +475,17 @@ $('btnExport').onclick = async () => {
 };
 $('importFile').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
-  const pins = JSON.parse(await f.text());
-  for (const p of pins) { await DB.put(p); if (!markers.has(p.id)) addMarker(p); }
-  updateCount(); $('dlgList').close();
+  try {
+    const pins = JSON.parse(await f.text());
+    for (const p of pins) { await DB.put(p); if (!markers.has(p.id)) addMarker(p); }
+    refresh(); renderList(); toast(`นำเข้า ${pins.length} จุดแล้ว`);
+  } catch { toast('ไฟล์นี้อ่านไม่ได้'); }
+  e.target.value = '';
 };
 
 // ---------- Init ----------
 DB.all().then(pins => {
-  pins.forEach(p => addMarker(p));
-  updateCount();
+  pins.forEach(addMarker); refresh();
   if (pins.length) map.fitBounds(L.latLngBounds(pins.map(p => [p.lat, p.lng])).pad(0.3), { maxZoom: 18 });
 });
 </script>
