@@ -163,7 +163,13 @@
   #ar[hidden] { display: none; }
   #ar.nocam { background: linear-gradient(oklch(0.34 0.04 235), oklch(0.22 0.03 235)); }
   #arVideo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-  #arLayer { position: absolute; inset: 0; overflow: hidden; }
+  #arLayer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+  .ar-m { pointer-events: auto; }
+  .ar-reticle { position: absolute; z-index: 4; left: 50%; top: 50%; translate: -50% -50%; pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .ar-reticle i { width: 34px; height: 34px; border-radius: 50%; border: 2.5px solid #fff; box-shadow: 0 1px 6px oklch(0 0 0 / .45); position: relative; }
+  .ar-reticle i::after { content: ""; position: absolute; inset: 11px; border-radius: 50%; background: #fff; }
+  .ar-reticle span { position: absolute; top: 44px; white-space: nowrap; font-size: 13px; font-weight: 600; color: #fff; text-shadow: 0 1px 4px oklch(0 0 0 / .7); font-variant-numeric: tabular-nums; }
+  .ar-reticle.off i { opacity: .45; }
   .ar-top { position: absolute; z-index: 5; top: calc(12px + var(--safe-t)); left: 12px; right: 12px; display: flex; gap: 8px; align-items: center; }
   .ar-close { width: 44px; height: 44px; background: var(--paper); box-shadow: var(--shadow); }
   .ar-hud { flex: 1; justify-content: center; padding: 10px 14px; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; gap: 8px; }
@@ -271,6 +277,7 @@
 <section id="ar" hidden aria-label="มุมมองกล้อง AR">
   <video id="arVideo" playsinline muted autoplay></video>
   <div id="arLayer"></div>
+  <div class="ar-reticle" id="arReticle"><i></i><span id="arAimTxt"></span></div>
   <div class="ar-top">
     <button class="icon-btn ar-close" id="arClose" aria-label="ปิดกล้อง"><svg class="i"><use href="#i-x"/></svg></button>
     <div class="pill ar-hud"><span id="arHead">--°</span><span class="sep"></span><span id="arGps">GPS …</span></div>
@@ -378,7 +385,7 @@ let me = null, meMarker = null, meCircle = null, selected = null;
 // ---------- GPS ----------
 const fixes = []; // recent GPS fixes, used to average out random noise
 function onPos(p) {
-  me = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy };
+  me = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, speed: p.coords.speed ?? 0 };
   const now = Date.now(); fixes.push({ ...me, t: now });
   while (fixes.length && (now - fixes[0].t > 130000 || fixes.length > 60)) fixes.shift();
   const q = me.acc <= 10 ? 'ok' : me.acc <= 30 ? 'mid' : 'bad';
@@ -479,7 +486,7 @@ $('dlgSave').addEventListener('close', async () => {
   const pin = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), ...pending,
     type: fd.get('type'), depth: fd.get('depth'), pipe: fd.get('pipe'), note: fd.get('note') };
   pending = null;
-  await DB.put(pin); addMarker(pin); refresh(); select(pin.id, true); toast('บันทึกแล้ว');
+  await DB.put(pin); addMarker(pin); refresh(); if (ar.on) toast('บันทึกแล้ว · หันไปมาดูได้เลย'); else select(pin.id, true);
 });
 
 // ---------- Markers + detail ----------
@@ -582,7 +589,7 @@ $('importFile').onchange = async e => {
 
 // ---------- AR camera view ----------
 const arEl = $('ar'), arLayer = $('arLayer'), arVideo = $('arVideo');
-const ar = { on: false, raf: 0, stream: null, raw: null, s: {}, yawT: 0, yaw: 0, got: false, rel: false, range: 100, els: new Map(), t0: 0, tick: 0, nearest: null, aimed: null };
+const ar = { on: false, raf: 0, stream: null, raw: null, relAtt: null, s: {}, yawOff: 0, yawInit: false, yawAt: 0, relSeen: false, absSeen: false, got: false, range: 100, els: new Map(), t0: 0, tick: 0, nearest: null, aimed: null, ref: null, refT: 0, moving: false, moveT: null, lastT: 0, aim: null };
 const AR_RANGES = [30, 100, 500, Infinity], CAM_H = 1.4, CAM_LONG_FOV = 65, RAD = Math.PI / 180;
 const norm = a => ((a % 360) + 360) % 360, sdiff = (a, b) => ((a - b + 540) % 360) - 180, clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -600,18 +607,41 @@ function saveCal() { cal.t = Date.now(); if (me) { cal.lat = me.lat; cal.lng = m
 const isCal = () => cal.t && (cal.dLat || cal.dLng || cal.azOff);
 
 // Device attitude -> camera axes in a East/North/Up world (W3C rotation matrix). Handles pitch AND roll.
-function onOrient(e) {
-  const ios = e.webkitCompassHeading;
-  if (e.beta == null || e.gamma == null) return;
-  if (!e.absolute && ios == null) { ar.rel = true; return; }          // no true north on this sensor
+function readAtt(e) {
   const a = (e.alpha || 0) * RAD, b = e.beta * RAD, g = e.gamma * RAD;
   const sA = Math.sin(a), cA = Math.cos(a), sB = Math.sin(b), cB = Math.cos(b), sG = Math.sin(g), cG = Math.cos(g);
-  const R = [cA * cG - sA * sB * sG, cG * sA + cA * sB * sG, -cB * sG];             // screen right
-  const U = [-cB * sA, cA * cB, sB];                                                // screen up
-  const F = [-(cA * sG + cG * sA * sB), -(sA * sG - cA * cG * sB), -(cB * cG)];     // out of the back camera
-  ar.raw = { R, U, F }; ar.got = true;
-  if (ios != null && Math.abs(F[2]) < .6) ar.yawT = sdiff(ios, Math.atan2(F[0], F[1]) / RAD);   // iOS: re-anchor to true north
+  return {
+    R: [cA * cG - sA * sB * sG, cG * sA + cA * sB * sG, -cB * sG],             // device right
+    U: [-cB * sA, cA * cB, sB],                                                // device up
+    F: [-(cA * sG + cG * sA * sB), -(sA * sG - cA * cG * sB), -(cB * cG)],     // out of the back camera
+  };
 }
+const azOf = att => Math.atan2(att.F[0], att.F[1]) / RAD;
+// Sensor fusion: rotation comes from the gyro-based (relative) stream, which is smooth and does not wobble
+// when you pan. The magnetometer / compass heading only nudges the yaw offset slowly, so a pin stays put
+// when you look away and back.
+function feedYaw(trueAz, att, now) {
+  if (!ar.relAtt || Math.abs(att.F[2]) > .6) return;                 // pointing steeply up/down: heading is unreliable
+  const d = sdiff(trueAz, azOf(ar.relAtt));
+  if (!ar.yawInit) { ar.yawOff = d; ar.yawInit = true; ar.yawAt = now; return; }
+  const dt = Math.min(.5, (now - ar.yawAt) / 1000); ar.yawAt = now;
+  const tau = now - ar.t0 < 4000 ? 1 : 8;                              // converge fast at first, then trust the gyro
+  ar.yawOff += sdiff(d, ar.yawOff) * (1 - Math.exp(-dt / tau));
+}
+function onOrient(e, abs) {
+  if (e.beta == null || e.gamma == null) return;
+  const ios = e.webkitCompassHeading, att = readAtt(e), now = performance.now(); ar.got = true;
+  if (abs || e.absolute === true) {                                    // true-north stream (Android)
+    ar.absSeen = true;
+    if (!ar.relSeen) { ar.raw = att; ar.relAtt = att; ar.yawOff = 0; ar.yawInit = true; return; }   // no gyro stream on this device: use it as is
+    feedYaw(azOf(att), att, now);
+  } else {                                                             // gyro stream
+    if (!ar.relSeen) { ar.relSeen = true; ar.yawInit = false; }
+    ar.raw = att; ar.relAtt = att;
+    if (ios != null) feedYaw(ios, att, now);                           // iOS: compass heading arrives in the same event
+  }
+}
+const onAbsEv = e => onOrient(e, true), onRelEv = e => onOrient(e, false);
 function arPinEl(p) {
   let el = ar.els.get(p.id);
   if (el) return el;
@@ -628,20 +658,39 @@ function arFocal(W, H) {
   if (vw && vh && !arEl.classList.contains('nocam')) return (Math.max(vw, vh) / 2) / Math.tan(CAM_LONG_FOV / 2 * RAD) * Math.max(W / vw, H / vh);
   return (W / 2) / Math.tan(20 * RAD);
 }
+// The position everything is drawn against. It is FROZEN while you stand still (GPS wobble of a couple of metres would
+// otherwise swing a nearby pin by tens of degrees) and only follows you once you clearly walk.
+function updateRef(now, dt) {
+  const cand = livePos(); if (!cand) return null;
+  if (!ar.ref) { ar.ref = { lat: cand.lat, lng: cand.lng, acc: cand.acc }; ar.refT = now; }
+  const R = ar.ref, d = L.latLng(R.lat, R.lng).distanceTo([cand.lat, cand.lng]), thr = Math.max(4, 1.5 * cand.acc), speed = me?.speed || 0;
+  const follow = tau => { const k = 1 - Math.exp(-dt / tau); R.lat += (cand.lat - R.lat) * k; R.lng += (cand.lng - R.lng) * k; R.acc = cand.acc; };
+  if (!ar.moving) {
+    if (d > thr || speed > .8) { ar.moveT ??= now; if (now - ar.moveT > 1500) ar.moving = true; } else ar.moveT = null;
+    if (now - ar.refT < 6000 && d <= thr) follow(2.5);                // settle on a good average right after opening
+  } else {
+    follow(.7);
+    if (d < 1.5 && speed < .4) { ar.moving = false; ar.moveT = null; ar.refT = now - 4000; }
+  }
+  return R;
+}
 function arFrame() {
   if (!ar.on) return; ar.raf = requestAnimationFrame(arFrame);
   const W = arEl.clientWidth, H = arEl.clientHeight;
+  const now = performance.now(), dt = Math.min(.25, (now - (ar.lastT || now)) / 1000); ar.lastT = now;
   if (ar.raw) {
-    for (const k of ['F', 'U', 'R']) {
-      const sv = ar.s[k]; if (!sv) { ar.s[k] = ar.raw[k].slice(); continue; }
-      for (let i = 0; i < 3; i++) sv[i] += (ar.raw[k][i] - sv[i]) * .25;
+    const th = (screen.orientation?.angle ?? window.orientation ?? 0) * RAD, c = Math.cos(th), sn = Math.sin(th);   // landscape support
+    const T = { F: ar.raw.F, R: ar.raw.R.map((v, i) => v * c - ar.raw.U[i] * sn), U: ar.raw.U.map((v, i) => v * c + ar.raw.R[i] * sn) };
+    const k = 1 - Math.exp(-dt / .05);
+    for (const key of ['F', 'U', 'R']) {
+      const sv = ar.s[key]; if (!sv) { ar.s[key] = T[key].slice(); continue; }
+      for (let i = 0; i < 3; i++) sv[i] += (T[key][i] - sv[i]) * k;
       const n = Math.hypot(...sv) || 1; for (let i = 0; i < 3; i++) sv[i] /= n;
     }
-    ar.yaw += sdiff(ar.yawT, ar.yaw) * .2;
   }
-  const S = ar.s, ready = !!S.F;
-  const camAz = ready ? norm(Math.atan2(S.F[0], S.F[1]) / RAD + ar.yaw + cal.azOff) : null;
-  const gp = livePos();                                      // steadier than the raw latest fix
+  const S = ar.s, ready = !!S.F && ar.yawInit;
+  const camAz = ready ? norm(Math.atan2(S.F[0], S.F[1]) / RAD + ar.yawOff + cal.azOff) : null;
+  const gp = updateRef(now, dt);                              // frozen while standing still
   const eff = gp ? { lat: gp.lat + cal.dLat, lng: gp.lng + cal.dLng, acc: gp.acc } : null;
   $('arHead').textContent = camAz == null ? '--°' : `${Math.round(camAz)}° ${dirName(camAz)}`;
   $('arGps').textContent = gp ? `GPS ±${Math.round(gp.acc)} ม.` : 'GPS …'; $('arGps').classList.toggle('cal', !!isCal());
@@ -650,11 +699,11 @@ function arFrame() {
   if (!eff) { hint = 'กำลังหาตำแหน่ง GPS…'; hide(); }
   else if (!ready) {
     hide();
-    hint = performance.now() - ar.t0 < 3000 ? 'กำลังอ่านเข็มทิศ…' : ar.rel
+    hint = performance.now() - ar.t0 < 3000 ? 'กำลังอ่านเข็มทิศ…' : ar.relSeen
       ? 'เครื่องนี้อ่านทิศเหนือจริงไม่ได้ · ลองขยับมือถือเป็นเลข 8 หรือใช้มือถือเครื่องอื่น'
       : 'ไม่พบเซนเซอร์เข็มทิศ · มุมมองนี้ใช้ได้บนมือถือเท่านั้น';
   } else {
-    const f = arFocal(W, H), cosLat = Math.cos(eff.lat * RAD), yawAll = ar.yaw + cal.azOff;
+    const f = arFocal(W, H), cosLat = Math.cos(eff.lat * RAD), yawAll = ar.yawOff + cal.azOff;
     const items = [];
     pinData.forEach(p => {
       const dy = (p.lat - eff.lat) * 111320, dx = (p.lng - eff.lng) * 111320 * cosLat, dist = Math.hypot(dx, dy);
@@ -685,12 +734,19 @@ function arFrame() {
     }
     ar.els.forEach((e, id) => { if (!seen.has(id)) e.hidden = true; });
     ar.nearest = null; pinData.forEach(p => { const d = L.latLng(eff.lat, eff.lng).distanceTo([p.lat, p.lng]); if (!ar.nearest || d < ar.nearest.d) ar.nearest = { p, d }; });
-    const el0 = Math.asin(clamp(S.F[2], -1, 1)) / RAD;
-    if (el0 < -55) hint = 'ยกมือถือตั้งตรง แล้วหันกล้องไปข้างหน้า';
-    else if (!items.length && ar.shoot) hint = 'ยืนที่จุดท่อ แล้วกดปุ่มถ่ายรูป ตำแหน่งจะถูกบันทึกให้เอง';
+    // where the screen centre meets the ground: horizontal distance = camera height / tan(pitch down)
+    const el0 = Math.asin(clamp(S.F[2], -1, 1)) / RAD; ar.aim = null;
+    if (el0 < -8) {
+      const dG = Math.min(15, CAM_H / Math.tan(-el0 * RAD)), b = camAz * RAD;
+      ar.aim = { dist: dG, lat: eff.lat + dG * Math.cos(b) / 111320, lng: eff.lng + dG * Math.sin(b) / (111320 * cosLat) };
+    }
+    const rt = $('arAimTxt'), aimTxt = ar.aim ? `~${ar.aim.dist.toFixed(1)} ม.` : 'ก้มกล้องลงเล็งพื้น';
+    if (rt.textContent !== aimTxt) rt.textContent = aimTxt;
+    $('arReticle').classList.toggle('off', !ar.aim);
+    if (!items.length && ar.shoot) hint = 'ยืนที่จุดท่อ แล้วกดปุ่มถ่ายรูป ตำแหน่งจะถูกบันทึกให้เอง';
     else if (!items.length) hint = pinData.size ? `ไม่มีจุดในระยะ ${rangeLabel(ar.range)} · กดปุ่มระยะเพื่อขยาย` : 'ยังไม่มีจุดที่บันทึกไว้';
     else if (eff.acc > 20) hint = `GPS คลาดเคลื่อน ±${Math.round(eff.acc)} ม. · หมุดอาจเพี้ยน ลองไปที่โล่งแจ้ง`;
-    else if (performance.now() - ar.t0 < 6000) hint = ar.shoot ? 'ยืนที่จุดท่อ แล้วกดปุ่มถ่ายรูป ตำแหน่งจะถูกบันทึกให้เอง' : 'หันกล้องไปทางจุดที่บันทึกไว้ · ถ้าหมุดไม่ตรง กด "ปรับให้ตรง"';
+    else if (performance.now() - ar.t0 < 6000) hint = ar.shoot ? 'เล็งตรงจุดบนพื้นที่จะบันทึก แล้วกดปุ่มถ่ายรูป · หันไปมาแล้วหมุดจะอยู่ที่เดิม' : 'หันกล้องไปทางจุดที่บันทึกไว้ · ถ้าหมุดไม่ตรง กด "ปรับให้ตรง"';
   }
   if (!$('arCal').hidden && ++ar.tick % 6 === 0) renderCal();
   const h = $('arHint'); if (h.textContent !== hint) h.textContent = hint;
@@ -708,12 +764,12 @@ $('arCalBtn').onclick = () => { $('arCal').hidden = false; $('arCalBtn').hidden 
 function closeCal() { $('arCal').hidden = true; $('arCalBtn').hidden = false; $('arHint').style.display = ''; }
 $('calClose').onclick = closeCal;
 $('calAbtn').onclick = () => {                      // "I'm standing at this pin" -> fix GPS bias
-  const n = ar.nearest, gp = livePos(); if (!n || !gp) return;
+  const n = ar.nearest, gp = ar.ref; if (!n || !gp) return;
   cal.dLat = n.p.lat - gp.lat; cal.dLng = n.p.lng - gp.lng; saveCal(); renderCal(); toast('ปรับตำแหน่งแล้ว');
 };
 $('calBbtn').onclick = () => {                      // "this pin is straight ahead" -> fix compass bias
   const a = ar.aimed; if (!a || !ar.s.F) return;
-  const cur = norm(Math.atan2(ar.s.F[0], ar.s.F[1]) / RAD + ar.yaw + cal.azOff);
+  const cur = norm(Math.atan2(ar.s.F[0], ar.s.F[1]) / RAD + ar.yawOff + cal.azOff);
   cal.azOff += sdiff(a.brg, cur); saveCal(); renderCal(); toast('ปรับทิศแล้ว');
 };
 $('calReset').onclick = () => { cal = { dLat: 0, dLng: 0, azOff: 0, t: 0, lat: 0, lng: 0 }; try { localStorage.removeItem('pp-cal'); } catch {} renderCal(); };
@@ -722,10 +778,10 @@ async function openAR(opt = {}) {
   if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
     try { if (await DeviceOrientationEvent.requestPermission() !== 'granted') toast('ต้องอนุญาตเซนเซอร์เข็มทิศ'); } catch {}
   }
-  closeDetail(); loadCal(); Object.assign(ar, { shoot: !!opt.shoot, on: true, raw: null, s: {}, yaw: 0, yawT: 0, got: false, rel: false, t0: performance.now() });
+  closeDetail(); loadCal(); Object.assign(ar, { shoot: !!opt.shoot, on: true, raw: null, relAtt: null, s: {}, yawOff: 0, yawInit: false, relSeen: false, absSeen: false, got: false, ref: null, moving: false, moveT: null, lastT: 0, aim: null, t0: performance.now() });
   arEl.hidden = false; arEl.classList.remove('nocam', 'flash'); closeCal();
-  window.addEventListener('deviceorientationabsolute', onOrient);
-  window.addEventListener('deviceorientation', onOrient);
+  window.addEventListener('deviceorientationabsolute', onAbsEv);
+  window.addEventListener('deviceorientation', onRelEv);
   try {
     ar.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
     arVideo.srcObject = ar.stream; arVideo.play().catch(() => {});
@@ -735,7 +791,7 @@ async function openAR(opt = {}) {
 }
 function closeAR() {
   ar.on = false; cancelAnimationFrame(ar.raf);
-  window.removeEventListener('deviceorientationabsolute', onOrient); window.removeEventListener('deviceorientation', onOrient);
+  window.removeEventListener('deviceorientationabsolute', onAbsEv); window.removeEventListener('deviceorientation', onRelEv);
   ar.stream?.getTracks().forEach(t => t.stop()); ar.stream = null; arVideo.srcObject = null;
   arLayer.innerHTML = ''; ar.els.clear(); arEl.hidden = true;
 }
@@ -748,15 +804,17 @@ addEventListener('keydown', e => { if (e.key === 'Escape' && ar.on) closeAR(); }
 $('arShutter').onclick = async () => {
   if (!ar.stream) { closeAR(); $('file').click(); return; }          // no in-page camera: use the device camera app
   if (!arVideo.videoWidth) { toast('กล้องยังไม่พร้อม รอสักครู่แล้วกดอีกครั้ง'); return; }
+  if (!ar.ref) { toast('ยังไม่ได้ตำแหน่ง GPS รอสักครู่'); return; }
   const vw = arVideo.videoWidth, vh = arVideo.videoHeight, sc = Math.min(1, 1280 / Math.max(vw, vh));
   const c = document.createElement('canvas'); c.width = Math.round(vw * sc); c.height = Math.round(vh * sc);
   c.getContext('2d').drawImage(arVideo, 0, 0, c.width, c.height);
   const photo = c.toDataURL('image/jpeg', 0.75);
   arEl.classList.remove('flash'); void arEl.offsetWidth; arEl.classList.add('flash');
-  let a = await collectPos(); if (!a) { await getFreshPos(); a = avgPos(); }
-  closeAR();
-  if (!a) { pending = { photo }; startManual('ไม่พบตำแหน่ง · แตะแผนที่ตรงจุดที่วางท่อ'); return; }
-  pending = { lat: a.lat, lng: a.lng, acc: a.acc, source: a.n > 1 ? `GPS เฉลี่ย ${a.n} ครั้ง` : 'GPS มือถือ', photo };
+  // The AR session stays alive (sensors, position reference) so the new pin is drawn with exactly the same maths as every other pin.
+  const aim = ar.aim, R = ar.ref;
+  ar.refT = -1e9;                                                    // freeze the reference NOW so this pin and later frames share it
+  if (aim) pending = { lat: aim.lat, lng: aim.lng, acc: Math.hypot(R.acc, aim.dist * .12), source: `เล็งพื้น ~${aim.dist.toFixed(1)} ม.`, photo };
+  else { pending = { lat: R.lat + cal.dLat, lng: R.lng + cal.dLng, acc: R.acc, source: 'ตำแหน่งที่ยืน', photo }; toast('ไม่ได้เล็งพื้น · บันทึกตรงที่ยืน'); }
   openSave();
 };
 $('arGallery').onclick = () => { closeAR(); $('file').click(); };
