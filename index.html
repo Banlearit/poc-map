@@ -158,6 +158,18 @@
   .item .dist { font-size: 13px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; flex: none; }
   .empty-list { text-align: center; padding: 28px 12px; color: var(--ink-2); font-size: 14.5px; line-height: 1.5; }
 
+  [hidden] { display: none !important; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--paper-2); border-radius: 16px; padding: 4px; }
+  .seg label { position: relative; }
+  .seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .seg span { display: grid; place-items: center; height: 44px; border-radius: 12px; font-size: 15px; font-weight: 500; color: var(--ink-2); transition: background .15s, color .15s; }
+  .seg input:checked + span { background: var(--paper); color: var(--ink); font-weight: 600; box-shadow: 0 1px 3px oklch(0.2 0.03 235 / .18); }
+  .seg input:focus-visible + span { outline: 3px solid var(--accent); outline-offset: 1px; }
+  .grp { display: flex; flex-direction: column; gap: 10px; }
+  .lbl { font-size: 13px; font-weight: 500; color: var(--ink-2); margin-bottom: -4px; }
+  .check { display: flex; align-items: center; gap: 12px; background: var(--accent-soft); border-radius: 14px; padding: 12px 14px; font-size: 14px; font-weight: 500; }
+  .check input { width: 22px; height: 22px; flex: none; }
+  #arCanvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   /* AR view */
   #ar { position: fixed; inset: 0; z-index: 880; background: oklch(0.2 0.02 235); overflow: hidden; }
   #ar[hidden] { display: none; }
@@ -276,6 +288,7 @@
 
 <section id="ar" hidden aria-label="มุมมองกล้อง AR">
   <video id="arVideo" playsinline muted autoplay></video>
+  <canvas id="arCanvas"></canvas>
   <div id="arLayer"></div>
   <div class="ar-reticle" id="arReticle"><i></i><span id="arAimTxt"></span></div>
   <div class="ar-top">
@@ -305,10 +318,20 @@
     <div class="grab"></div>
     <header><h2>บันทึกจุดท่อ</h2><button class="icon-btn" value="cancel" aria-label="ปิด" formnovalidate><svg class="i"><use href="#i-x"/></svg></button></header>
     <div class="shot"><img id="preview" alt="รูปที่ถ่าย" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="><div class="where" id="coordText"></div></div>
-    <div class="chips" id="typeChips" role="radiogroup" aria-label="ประเภท"></div>
+    <div class="seg" role="radiogroup" aria-label="ชนิดที่บันทึก">
+      <label><input type="radio" name="kind" value="point" checked><span>จุด</span></label>
+      <label><input type="radio" name="kind" value="pipe"><span>เส้นท่อใต้ดิน</span></label>
+    </div>
+    <div id="pointFields" class="grp"><div class="chips" id="typeChips" role="radiogroup" aria-label="ประเภท"></div></div>
+    <div id="pipeFields" class="grp" hidden>
+      <div class="lbl">วัสดุท่อ</div><div class="chips" id="matChips" role="radiogroup"></div>
+      <div class="lbl">ใช้งาน</div><div class="chips" id="useChips" role="radiogroup"></div>
+      <label class="field">ขนาดท่อ (นิ้ว)<input name="dia" type="number" inputmode="decimal" step="0.25" min="0" placeholder="1"></label>
+      <label class="check" id="contRow" hidden><input type="checkbox" name="cont" checked><span id="contTxt"></span></label>
+    </div>
     <div class="two">
-      <label class="field">ความลึก (ซม.)<input name="depth" type="number" inputmode="numeric" placeholder="40"></label>
-      <label class="field">ขนาด / วัสดุท่อ<input name="pipe" placeholder="PVC 1 นิ้ว"></label>
+      <label class="field">ความลึกใต้พื้น (ม.)<input name="depth" type="number" inputmode="decimal" step="0.05" min="0" placeholder="0.6"></label>
+      <label class="field" id="pipeTxtRow">ขนาด / วัสดุท่อ<input name="pipe" placeholder="PVC 1 นิ้ว"></label>
     </div>
     <label class="field">บันทึกช่วยจำ<textarea name="note" rows="2" placeholder="เช่น หน้าบ้านเลขที่ 12 ห่างรั้ว 1 เมตร"></textarea></label>
     <div class="foot"><button class="btn primary" value="ok">บันทึกจุดนี้</button></div>
@@ -343,8 +366,22 @@ const TYPES = [
   { k: 'ท่อเมน',     c: 'oklch(0.55 0.17 255)' },
   { k: 'มิเตอร์',    c: 'oklch(0.55 0.18 305)' },
   { k: 'อื่น ๆ',      c: 'oklch(0.55 0.02 235)' },
+  { k: 'ท่อ',        c: 'oklch(0.58 0.15 240)' },
 ];
 const colorOf = t => (TYPES.find(x => x.k === t) || TYPES[5]).c;
+const PIPE_USE = [{ k: 'ประปา', c: 'oklch(0.58 0.15 240)' }, { k: 'น้ำเสีย', c: 'oklch(0.5 0.08 60)' }, { k: 'ดับเพลิง', c: 'oklch(0.58 0.2 25)' }, { k: 'อื่น ๆ', c: 'oklch(0.55 0.02 235)' }];
+const MATERIALS = ['PVC', 'HDPE', 'เหล็กชุบ (GI)', 'เหล็กหล่อ', 'ทองแดง', 'คอนกรีต'];
+const pinColor = p => p.line ? (PIPE_USE.find(u => u.k === p.use) || PIPE_USE[3]).c : colorOf(p.type);
+// depth is stored in metres (depthM); older records stored centimetres in `depth`
+const depthOf = p => (p.depthM != null && p.depthM !== '' && !isNaN(+p.depthM)) ? +p.depthM : (p.depth != null && p.depth !== '' && !isNaN(+p.depth) ? +p.depth / 100 : null);
+const fmtDepth = m => m == null ? null : m < 1 ? `${Math.round(m * 100)} ซม.` : `${+m.toFixed(1)} ม.`;
+function lineGroups() {
+  const g = new Map();
+  pinData.forEach(p => { if (p.line) { if (!g.has(p.line)) g.set(p.line, []); g.get(p.line).push(p); } });
+  g.forEach(a => a.sort((x, y) => x.createdAt.localeCompare(y.createdAt)));
+  return g;
+}
+const lineLen = vs => { let d = 0; for (let i = 1; i < vs.length; i++) d += L.latLng(vs[i - 1].lat, vs[i - 1].lng).distanceTo([vs[i].lat, vs[i].lng]); return d; };
 const fmtDate = iso => new Date(iso).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' });
 const fmtDist = m => m < 1000 ? `${Math.round(m)} ม.` : `${(m / 1000).toFixed(1)} กม.`;
 let toastT;
@@ -471,9 +508,26 @@ map.on('click', e => {
 });
 
 // ---------- Save sheet ----------
-$('typeChips').innerHTML = TYPES.map((t, i) => `<label class="chip"><input type="radio" name="type" value="${t.k}" ${i ? '' : 'checked'}><span><i class="dot" style="background:${t.c}"></i>${t.k}</span></label>`).join('');
+$('typeChips').innerHTML = TYPES.filter(t => t.k !== 'ท่อ').map((t, i) => `<label class="chip"><input type="radio" name="type" value="${t.k}" ${i ? '' : 'checked'}><span><i class="dot" style="background:${t.c}"></i>${t.k}</span></label>`).join('');
+$('matChips').innerHTML = MATERIALS.map((m, i) => `<label class="chip"><input type="radio" name="mat" value="${m}" ${i ? '' : 'checked'}><span>${m}</span></label>`).join('');
+$('useChips').innerHTML = PIPE_USE.map((u, i) => `<label class="chip"><input type="radio" name="use" value="${u.k}" ${i ? '' : 'checked'}><span><i class="dot" style="background:${u.c}"></i>${u.k}</span></label>`).join('');
+function syncKind() { const pipe = $('formSave').elements.kind.value === 'pipe'; $('pointFields').hidden = pipe; $('pipeFields').hidden = !pipe; $('pipeTxtRow').hidden = pipe; }
+$('formSave').addEventListener('change', e => { if (e.target.name === 'kind') syncKind(); });
+let contVertex = null;   // last vertex of a pipe line you may want to continue
 function openSave() {
   $('formSave').reset();
+  contVertex = null;
+  { let best = null; pinData.forEach(p => { if (p.line && (!best || p.createdAt > best.createdAt)) best = p; });
+    if (best && Date.now() - new Date(best.createdAt) < 20 * 60e3 && L.latLng(best.lat, best.lng).distanceTo([pending.lat, pending.lng]) < 300) contVertex = best; }
+  const f = $('formSave').elements;
+  $('contRow').hidden = !contVertex;
+  if (contVertex) {
+    const n = (lineGroups().get(contVertex.line) || []).length;
+    $('contTxt').textContent = `ต่อจากเส้นท่อเดิม (${n} จุด · ${contVertex.use || ''} ${contVertex.mat || ''})`;
+    f.kind.value = 'pipe'; f.mat.value = contVertex.mat || MATERIALS[0]; f.use.value = contVertex.use || PIPE_USE[0].k; f.dia.value = contVertex.dia ?? '';
+    const d = depthOf(contVertex); if (d != null) f.depth.value = d;
+  }
+  syncKind();
   const img = $('preview'); img.style.display = pending.photo ? '' : 'none'; if (pending.photo) img.src = pending.photo;
   $('coordText').innerHTML = `<b>${esc(pending.source)}${pending.acc ? ` · ±${Math.round(pending.acc)} ม.` : ''}</b>${pending.lat.toFixed(6)}, ${pending.lng.toFixed(6)}`;
   document.body.classList.add('sheet-open');
@@ -483,39 +537,55 @@ $('dlgSave').addEventListener('close', async () => {
   document.body.classList.remove('sheet-open');
   if ($('dlgSave').returnValue !== 'ok' || !pending) { pending = null; return; }
   const fd = new FormData($('formSave'));
-  const pin = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), ...pending,
-    type: fd.get('type'), depth: fd.get('depth'), pipe: fd.get('pipe'), note: fd.get('note') };
+  const depthM = fd.get('depth') === '' ? null : +fd.get('depth');
+  let extra;
+  if (fd.get('kind') === 'pipe') {
+    const dia = fd.get('dia'), mat = fd.get('mat'), use = fd.get('use');
+    extra = { type: 'ท่อ', line: (fd.get('cont') && contVertex) ? contVertex.line : crypto.randomUUID(), mat, dia, use, pipe: `${mat}${dia ? ' ' + dia + '″' : ''}` };
+  } else extra = { type: fd.get('type'), pipe: fd.get('pipe') };
+  const pin = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), ...pending, ...extra, depthM, note: fd.get('note') };
   pending = null;
   await DB.put(pin); addMarker(pin); refresh(); if (ar.on) toast('บันทึกแล้ว · หันไปมาดูได้เลย'); else select(pin.id, true);
 });
 
 // ---------- Markers + detail ----------
-const pinIcon = (type, sel) => L.divIcon({ className: '', iconSize: [34, 42], iconAnchor: [17, 41],
-  html: `<svg class="pin ${sel ? 'sel' : ''}" viewBox="0 0 34 42" width="34" height="42"><path d="M17 41S3.500 26 3.500 16a13.500 13.500 0 0 1 27 0C30.500 26 17 41 17 41z" fill="${colorOf(type)}" stroke="#fff" stroke-width="2.500"/><circle cx="17" cy="16" r="5.500" fill="#fff"/></svg>` });
+const pinIcon = (p, sel) => L.divIcon({ className: '', iconSize: [34, 42], iconAnchor: [17, 41],
+  html: `<svg class="pin ${sel ? 'sel' : ''}" viewBox="0 0 34 42" width="34" height="42"><path d="M17 41S3.500 26 3.500 16a13.500 13.500 0 0 1 27 0C30.500 26 17 41 17 41z" fill="${pinColor(p)}" stroke="#fff" stroke-width="2.500"/><circle cx="17" cy="16" r="5.500" fill="#fff"/></svg>` });
 function addMarker(p) {
   pinData.set(p.id, p);
-  const m = L.marker([p.lat, p.lng], { icon: pinIcon(p.type), riseOnHover: true, keyboard: true, title: p.type }).addTo(map);
+  const m = L.marker([p.lat, p.lng], { icon: pinIcon(p), riseOnHover: true, keyboard: true, title: p.type }).addTo(map);
   m.on('click', e => { L.DomEvent.stop(e); select(p.id, false); });
   markers.set(p.id, m);
 }
 function select(id, fly) {
-  if (selected && markers.has(selected)) markers.get(selected).setIcon(pinIcon(pinData.get(selected).type, false));
+  if (selected && markers.has(selected)) markers.get(selected).setIcon(pinIcon(pinData.get(selected), false));
   selected = id; const p = pinData.get(id), m = markers.get(id);
-  m.setIcon(pinIcon(p.type, true));
+  m.setIcon(pinIcon(p, true));
   openDetail(p);
   const target = map.project(m.getLatLng(), Math.max(map.getZoom(), fly ? 18 : 0)).add([0, innerHeight * 0.2]);
   map.flyTo(map.unproject(target, Math.max(map.getZoom(), fly ? 18 : 0)), Math.max(map.getZoom(), fly ? 18 : map.getZoom()), { duration: .5 });
+}
+function lineBlock(p) {
+  if (!p.line) return '';
+  const vs = lineGroups().get(p.line) || [p], ds = vs.map(depthOf).filter(x => x != null);
+  const dr = ds.length ? (Math.min(...ds) === Math.max(...ds) ? fmtDepth(ds[0]) : `${fmtDepth(Math.min(...ds))} – ${fmtDepth(Math.max(...ds))}`) : null;
+  return `<div class="facts">
+    <div class="fact"><span>เส้นท่อ</span><b>${vs.length} จุด · ${fmtDist(lineLen(vs))}</b></div>
+    <div class="fact"><span>วัสดุ / ขนาด</span><b>${esc(p.mat || '-')}${p.dia ? ` ${esc(p.dia)}″` : ''}</b></div>
+    <div class="fact"><span>ใช้งาน</span><b>${esc(p.use || '-')}</b></div>
+    ${dr ? `<div class="fact"><span>ลึกใต้พื้น</span><b>${dr}</b></div>` : ''}</div>`;
 }
 function openDetail(p) {
   const d = $('detail');
   const dist = me ? fmtDist(L.latLng(me.lat, me.lng).distanceTo([p.lat, p.lng])) : null;
   d.innerHTML = `<div class="grab"></div>
-    <div class="d-head"><span class="dot" style="background:${colorOf(p.type)}"></span><h2>${esc(p.type)}</h2>
+    <div class="d-head"><span class="dot" style="background:${pinColor(p)}"></span><h2>${esc(p.type)}${p.line && p.use ? ' · ' + esc(p.use) : ''}</h2>
       <button class="icon-btn" id="dClose" aria-label="ปิด"><svg class="i"><use href="#i-x"/></svg></button></div>
     ${p.photo ? `<img class="d-photo" src="${p.photo}" alt="รูปจุด${esc(p.type)}">` : ''}
-    ${(p.depth || p.pipe || dist) ? `<div class="facts">
-      ${p.depth ? `<div class="fact"><span>ความลึก</span><b>${esc(p.depth)} ซม.</b></div>` : ''}
-      ${p.pipe ? `<div class="fact"><span>ท่อ</span><b>${esc(p.pipe)}</b></div>` : ''}
+    ${lineBlock(p)}
+    ${(depthOf(p) != null || (p.pipe && !p.line) || dist) ? `<div class="facts">
+      ${depthOf(p) != null ? `<div class="fact"><span>${p.line ? 'ลึกที่จุดนี้' : 'ความลึก'}</span><b>${fmtDepth(depthOf(p))}</b></div>` : ''}
+      ${p.pipe && !p.line ? `<div class="fact"><span>ท่อ</span><b>${esc(p.pipe)}</b></div>` : ''}
       ${dist ? `<div class="fact"><span>ห่างจากคุณ</span><b>${dist}</b></div>` : ''}</div>` : ''}
     ${p.note ? `<p class="note">${esc(p.note)}</p>` : ''}
     <div class="meta">${fmtDate(p.createdAt)}<br>${p.lat.toFixed(6)}, ${p.lng.toFixed(6)} · ${esc(p.source)}</div>
@@ -537,11 +607,22 @@ function openDetail(p) {
 function closeDetail() {
   $('detail').classList.remove('on');
   if (!$('dlgSave').open && !$('dlgList').open) document.body.classList.remove('sheet-open');
-  if (selected && markers.has(selected)) markers.get(selected).setIcon(pinIcon(pinData.get(selected).type, false));
+  if (selected && markers.has(selected) && pinData.has(selected)) markers.get(selected).setIcon(pinIcon(pinData.get(selected), false));
   selected = null;
 }
 
+const lineLayers = [];
+function redrawLines() {
+  lineLayers.forEach(l => l.remove()); lineLayers.length = 0;
+  lineGroups().forEach(vs => {
+    if (vs.length < 2) return;
+    const pl = L.polyline(vs.map(v => [v.lat, v.lng]), { color: pinColor(vs[0]), weight: 6, opacity: .85, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+    pl.on('click', e => { L.DomEvent.stop(e); select(vs[0].id, false); });
+    lineLayers.push(pl);
+  });
+}
 function refresh() {
+  redrawLines();
   const n = markers.size;
   $('count').textContent = n ? `${n} จุดที่บันทึกไว้` : 'ยังไม่มีจุด';
   $('listCount').textContent = n;
@@ -550,6 +631,7 @@ function refresh() {
 
 // ---------- List ----------
 let filter = null;
+const itemSub = p => { const d = fmtDepth(depthOf(p)); return p.line ? [p.pipe, d && 'ลึก ' + d, p.note].filter(Boolean).join(' · ') : (p.note || [p.pipe, d && 'ลึก ' + d].filter(Boolean).join(' · ') || fmtDate(p.createdAt)); };
 function renderList() {
   const counts = {}; pinData.forEach(p => counts[p.type] = (counts[p.type] || 0) + 1);
   $('filters').innerHTML = `<button aria-pressed="${!filter}" data-k="">ทั้งหมด ${pinData.size}</button>` +
@@ -561,7 +643,7 @@ function renderList() {
   $('listTitle').textContent = here ? 'จุดใกล้คุณ' : 'จุดที่บันทึกไว้';
   $('list').innerHTML = pins.length ? pins.map(({ p, d }) => `<button class="item" data-id="${p.id}">
     ${p.photo ? `<img class="th" src="${p.photo}" alt="">` : `<span class="th"><svg class="i"><use href="#i-pin"/></svg></span>`}
-    <span class="tx"><b><i class="dot" style="background:${colorOf(p.type)}"></i>${esc(p.type)}</b><p>${esc(p.note || p.pipe || fmtDate(p.createdAt))}</p></span>
+    <span class="tx"><b><i class="dot" style="background:${pinColor(p)}"></i>${esc(p.type)}${p.line && p.use ? ' · ' + esc(p.use) : ''}</b><p>${esc(itemSub(p))}</p></span>
     ${d != null ? `<span class="dist">${fmtDist(d)}</span>` : ''}</button>`).join('')
     : `<div class="empty-list">ยังไม่มีจุดในรายการนี้<br>กดถ่ายรูปที่หน้าแผนที่เพื่อเริ่มบันทึก</div>`;
   $('list').querySelectorAll('.item').forEach(el => el.onclick = () => { $('dlgList').close(); select(el.dataset.id, true); });
@@ -647,7 +729,7 @@ function arPinEl(p) {
   if (el) return el;
   el = document.createElement('button'); el.className = 'ar-m';
   el.innerHTML = `<span class="ar-card">${p.photo ? `<img src="${p.photo}" alt="">` : ''}<span class="nm"><b>${esc(p.type)}</b><small></small></span><svg class="i chev"><use href="#i-chev"/></svg></span>
-    <svg class="ar-glyph" viewBox="0 0 34 42"><path d="M17 41S3.5 26 3.5 16a13.5 13.5 0 0 1 27 0C30.5 26 17 41 17 41z" fill="${colorOf(p.type)}" stroke="#fff" stroke-width="2.5"/><circle cx="17" cy="16" r="5.5" fill="#fff"/></svg>`;
+    <svg class="ar-glyph" viewBox="0 0 34 42"><path d="M17 41S3.5 26 3.5 16a13.5 13.5 0 0 1 27 0C30.5 26 17 41 17 41z" fill="${pinColor(p)}" stroke="#fff" stroke-width="2.5"/><circle cx="17" cy="16" r="5.5" fill="#fff"/></svg>`;
   el.querySelector('small').dataset.k = '';
   el.onclick = () => select(p.id, false);
   arLayer.appendChild(el); ar.els.set(p.id, el); return el;
@@ -674,6 +756,75 @@ function updateRef(now, dt) {
   }
   return R;
 }
+// ---- underground pipes drawn as an "x-ray" over the camera: every vertex is projected twice (ground point and pipe point at its depth)
+const clearPipes = () => { const cv = $('arCanvas'); cv.getContext('2d').clearRect(0, 0, cv.width, cv.height); ar.hits = []; };
+function drawPipes(W, H, f, S, eff, yawAll, cosLat) {
+  const cv = $('arCanvas'), dpr = Math.min(2, devicePixelRatio || 1);
+  if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H); ar.hits = [];
+  const NEAR = .3;
+  const cam = (v, depth) => {                                    // east/north of the vertex relative to the camera, rotated by the yaw fix, then into camera axes
+    const dy = (v.lat - eff.lat) * 111320, dx = (v.lng - eff.lng) * 111320 * cosLat, r = Math.hypot(dx, dy), b = Math.atan2(dx, dy) - yawAll * RAD;
+    const E = r * Math.sin(b), N = r * Math.cos(b), Z = -CAM_H - depth;
+    return { xc: E * S.R[0] + N * S.R[1] + Z * S.R[2], yc: E * S.U[0] + N * S.U[1] + Z * S.U[2], zc: E * S.F[0] + N * S.F[1] + Z * S.F[2], r };
+  };
+  const clip = (a, b) => {
+    if (a.zc < NEAR && b.zc < NEAR) return null;
+    const lerp = (p, q, t) => ({ xc: p.xc + (q.xc - p.xc) * t, yc: p.yc + (q.yc - p.yc) * t, zc: p.zc + (q.zc - p.zc) * t });
+    if (a.zc < NEAR) a = lerp(a, b, (NEAR - a.zc) / (b.zc - a.zc));
+    if (b.zc < NEAR) b = lerp(b, a, (NEAR - b.zc) / (a.zc - b.zc));
+    return [a, b];
+  };
+  const sx = c => W / 2 + f * c.xc / c.zc, sy = c => H / 2 - f * c.yc / c.zc;
+  lineGroups().forEach((vs, id) => {
+    if (vs.length < 2) return;
+    const pts = vs.map(v => { const d = depthOf(v) ?? .6; return { v, d, g: cam(v, 0), p: cam(v, d) }; });
+    if (Math.min(...pts.map(q => q.g.r)) > ar.range) return;
+    const col = pinColor(vs[0]), dia = (+vs[0].dia || 1) * .0254;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    // route on the ground (dashed), so you can see where the pipe runs above it
+    ctx.setLineDash([4, 7]); ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 2;
+    for (let i = 1; i < pts.length; i++) { const s = clip(pts[i - 1].g, pts[i].g); if (!s) continue; ctx.beginPath(); ctx.moveTo(sx(s[0]), sy(s[0])); ctx.lineTo(sx(s[1]), sy(s[1])); ctx.stroke(); }
+    // drop lines from each ground point down to the pipe
+    ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 1.5; ctx.setLineDash([2, 5]);
+    pts.forEach(q => { if (q.g.zc > NEAR && q.p.zc > NEAR) { ctx.beginPath(); ctx.moveTo(sx(q.g), sy(q.g)); ctx.lineTo(sx(q.p), sy(q.p)); ctx.stroke(); } });
+    ctx.setLineDash([]);
+    // the pipe itself: a quad per segment, width follows perspective
+    for (let i = 1; i < pts.length; i++) {
+      const s = clip(pts[i - 1].p, pts[i].p); if (!s) continue;
+      const x1 = sx(s[0]), y1 = sy(s[0]), x2 = sx(s[1]), y2 = sy(s[1]);
+      const w1 = clamp(dia * f / s[0].zc, 9, 70), w2 = clamp(dia * f / s[1].zc, 9, 70);
+      const L2 = Math.hypot(x2 - x1, y2 - y1) || 1, nx = -(y2 - y1) / L2, ny = (x2 - x1) / L2;
+      ctx.strokeStyle = 'rgba(255,255,255,.38)'; ctx.lineWidth = Math.max(w1, w2) + 7; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();   // soft halo so the pipe reads on any background
+      ctx.fillStyle = col; ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x1 + nx * w1 / 2, y1 + ny * w1 / 2); ctx.lineTo(x2 + nx * w2 / 2, y2 + ny * w2 / 2); ctx.lineTo(x2 - nx * w2 / 2, y2 - ny * w2 / 2); ctx.lineTo(x1 - nx * w1 / 2, y1 - ny * w1 / 2); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.lineWidth = Math.max(1.5, (w1 + w2) * .09);   // highlight along the tube
+      ctx.beginPath(); ctx.moveTo(x1 - nx * w1 * .2, y1 - ny * w1 * .2); ctx.lineTo(x2 - nx * w2 * .2, y2 - ny * w2 * .2); ctx.stroke();
+      ar.hits.push({ id, x1, y1, x2, y2, w: Math.max(w1, w2), a: vs[i - 1].id, b: vs[i].id });
+    }
+    pts.forEach(q => {                                            // joints + depth label
+      if (q.p.zc <= NEAR) return;
+      const x = sx(q.p), y = sy(q.p), w = clamp(dia * f / q.p.zc, 9, 70);
+      ctx.fillStyle = col; ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, w / 2, 0, 7); ctx.fill(); ctx.stroke();
+      if (q.p.zc < 60 && x > 0 && x < W && y > 0 && y < H) {
+        const t = `ลึก ${fmtDepth(q.d)}`; ctx.font = '600 13px Anuphan, system-ui, sans-serif'; ctx.textBaseline = 'middle';
+        const tw = ctx.measureText(t).width, tx = x + w / 2 + 8 + tw > W - 6 ? x - w / 2 - 8 - tw : x + w / 2 + 8;   // keep the label on screen
+        ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.strokeText(t, tx, y); ctx.fillStyle = '#fff'; ctx.fillText(t, tx, y);
+      }
+    });
+  });
+}
+// tap a pipe in the camera view to open it
+$('arCanvas').addEventListener('click', e => {
+  const r = arEl.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  let best = null;
+  for (const h of ar.hits || []) {
+    const dx = h.x2 - h.x1, dy = h.y2 - h.y1, l2 = dx * dx + dy * dy || 1, t = clamp(((x - h.x1) * dx + (y - h.y1) * dy) / l2, 0, 1);
+    const d = Math.hypot(x - (h.x1 + t * dx), y - (h.y1 + t * dy));
+    if (d <= Math.max(26, h.w / 2 + 14) && (!best || d < best.d)) best = { d, id: t < .5 ? h.a : h.b };
+  }
+  if (best && pinData.has(best.id)) select(best.id, false);
+});
 function arFrame() {
   if (!ar.on) return; ar.raf = requestAnimationFrame(arFrame);
   const W = arEl.clientWidth, H = arEl.clientHeight;
@@ -695,7 +846,7 @@ function arFrame() {
   $('arHead').textContent = camAz == null ? '--°' : `${Math.round(camAz)}° ${dirName(camAz)}`;
   $('arGps').textContent = gp ? `GPS ±${Math.round(gp.acc)} ม.` : 'GPS …'; $('arGps').classList.toggle('cal', !!isCal());
   let hint = '';
-  const hide = () => ar.els.forEach(e => e.hidden = true);
+  const hide = () => { ar.els.forEach(e => e.hidden = true); clearPipes(); };
   if (!eff) { hint = 'กำลังหาตำแหน่ง GPS…'; hide(); }
   else if (!ready) {
     hide();
@@ -732,6 +883,7 @@ function arFrame() {
       const sm = el.querySelector('small'), t = `${fmtDist(it.dist)} · ±${unc}`;
       if (sm.dataset.k !== t) { sm.dataset.k = t; sm.textContent = t; }
     }
+    drawPipes(W, H, f, S, eff, yawAll, cosLat);
     ar.els.forEach((e, id) => { if (!seen.has(id)) e.hidden = true; });
     ar.nearest = null; pinData.forEach(p => { const d = L.latLng(eff.lat, eff.lng).distanceTo([p.lat, p.lng]); if (!ar.nearest || d < ar.nearest.d) ar.nearest = { p, d }; });
     // where the screen centre meets the ground: horizontal distance = camera height / tan(pitch down)
