@@ -171,6 +171,19 @@
   .ar-range { padding: 0 14px; border: 0; font: 500 14px var(--font); color: var(--ink); cursor: pointer; gap: 6px; white-space: nowrap; }
   .ar-hint { position: absolute; z-index: 5; left: 12px; right: 12px; bottom: calc(24px + var(--safe-b)); max-width: 460px; margin: 0 auto; background: var(--ink); color: var(--paper); border-radius: 16px; padding: 12px 16px; font-size: 14px; line-height: 1.45; box-shadow: var(--shadow); text-align: center; }
   .ar-hint:empty { display: none; }
+  .btn.sm { height: 44px; padding: 0 14px; font-size: 14px; border-radius: 14px; }
+  .btn:disabled { opacity: .4; pointer-events: none; }
+  .ar-calbtn { position: absolute; z-index: 5; right: 12px; bottom: calc(92px + var(--safe-b)); padding: 10px 16px; border: 0; font: 600 14px var(--font); color: var(--ink); cursor: pointer; }
+  .ar-calbtn[hidden], .ar-cal[hidden] { display: none; }
+  .ar-cal { position: absolute; z-index: 6; left: 12px; right: 12px; bottom: calc(16px + var(--safe-b)); max-width: 460px; margin: 0 auto; background: var(--paper); border-radius: 22px; box-shadow: var(--shadow); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .cal-h { display: flex; align-items: center; justify-content: space-between; }
+  .cal-h b { font-size: 16px; font-weight: 600; }
+  .cal-t { margin: 0; font-size: 13px; color: var(--ink-2); line-height: 1.45; }
+  .cal-row { display: flex; align-items: center; gap: 10px; background: var(--paper-2); border-radius: 16px; padding: 10px 10px 10px 14px; }
+  .cal-row > div { flex: 1; min-width: 0; }
+  .cal-row span { display: block; font-size: 13px; font-weight: 600; }
+  .cal-row small { display: block; font-size: 12.5px; color: var(--ink-2); line-height: 1.35; margin-top: 2px; }
+  .cal-s { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
   .ar-m { position: absolute; left: 0; top: 0; z-index: 2; border: 0; padding: 0; background: none; font-family: inherit; color: var(--ink); cursor: pointer; will-change: transform; display: flex; flex-direction: column; align-items: center; width: 0; height: 0; }
   .ar-m[hidden] { display: none; }
   .ar-card { position: absolute; bottom: 44px; left: 0; translate: -50% 0; display: flex; align-items: center; gap: 8px; background: var(--paper); border-radius: 14px; padding: 5px 12px 5px 5px; box-shadow: var(--shadow); white-space: nowrap; }
@@ -252,7 +265,15 @@
     <div class="pill ar-hud"><span id="arHead">--°</span><span class="sep"></span><span id="arGps">GPS …</span></div>
     <button class="pill ar-range" id="arRange" aria-label="เปลี่ยนระยะ">ระยะ <b id="arRangeTxt">100 ม.</b></button>
   </div>
+  <button class="pill ar-calbtn" id="arCalBtn">ปรับให้ตรง</button>
   <div class="ar-hint" id="arHint" role="status"></div>
+  <div class="ar-cal" id="arCal" hidden>
+    <div class="cal-h"><b>ปรับให้ตรงกับของจริง</b><button class="icon-btn" id="calClose" aria-label="ปิด"><svg class="i"><use href="#i-x"/></svg></button></div>
+    <p class="cal-t">ใช้หมุดที่คุณรู้แน่ว่าอยู่ตรงไหน เช่น จุดที่เพิ่งบันทึก ทำทีละขั้นได้ ไม่ต้องครบ</p>
+    <div class="cal-row"><div><span>1 · ตำแหน่ง GPS</span><small id="calA"></small></div><button class="btn sm" id="calAbtn">ฉันยืนที่หมุดนี้</button></div>
+    <div class="cal-row"><div><span>2 · ทิศเข็มทิศ</span><small id="calB"></small></div><button class="btn sm" id="calBbtn">หมุดนี้อยู่กลางจอ</button></div>
+    <div class="cal-s"><span id="calS"></span><button class="btn sm" id="calReset">รีเซ็ต</button></div>
+  </div>
 </section>
 
 <aside id="detail" class="sheet" aria-live="polite"></aside>
@@ -342,8 +363,11 @@ const markers = new Map(), pinData = new Map();
 let me = null, meMarker = null, meCircle = null, selected = null;
 
 // ---------- GPS ----------
+const fixes = []; // recent GPS fixes, used to average out random noise
 function onPos(p) {
   me = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy };
+  const now = Date.now(); fixes.push({ ...me, t: now });
+  while (fixes.length && (now - fixes[0].t > 130000 || fixes.length > 60)) fixes.shift();
   const q = me.acc <= 10 ? 'ok' : me.acc <= 30 ? 'mid' : 'bad';
   $('gps').dataset.q = q; $('gpsText').textContent = `±${Math.round(me.acc)} ม.`;
   if (!meMarker) {
@@ -360,6 +384,27 @@ const getFreshPos = () => new Promise(res => {
   if (!navigator.geolocation) return res(me);
   navigator.geolocation.getCurrentPosition(p => { onPos(p); res(me); }, () => res(me), { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
 });
+// Weighted mean of recent fixes (weight 1/acc^2). Random error shrinks ~1/sqrt(N); a shared bias does not.
+function avgPos(windowMs = 12000) {
+  const now = Date.now(), f = fixes.filter(x => now - x.t <= windowMs && x.acc > 0);
+  if (!f.length) return null;
+  const best = Math.min(...f.map(x => x.acc)), use = f.filter(x => x.acc <= best * 2.5);
+  let sw = 0, la = 0, ln = 0;
+  for (const x of use) { const w = 1 / (x.acc * x.acc); sw += w; la += w * x.lat; ln += w * x.lng; }
+  return { lat: la / sw, lng: ln / sw, acc: Math.max(best * 0.6, 1 / Math.sqrt(sw)), n: use.length };
+}
+// iOS only reports when you move; if you stand still keep using the last fixes instead of losing the position
+function livePos() { return avgPos(8000) || avgPos(120000) || (me ? { ...me, n: 1 } : null); }
+// wait a few seconds so there are enough fixes to average
+async function collectPos(minN = 4, maxMs = 5000) {
+  const t0 = Date.now(); let shown = false;
+  while (Date.now() - t0 < maxMs) {
+    const a = avgPos(10000); if (a && a.n >= minN) return a;
+    if (!shown && Date.now() - t0 > 600) { toast('กำลังเฉลี่ยตำแหน่ง GPS…'); shown = true; }
+    await new Promise(r => setTimeout(r, 250));
+  }
+  return avgPos(15000);
+}
 $('btnLocate').onclick = () => me ? map.flyTo([me.lat, me.lng], Math.max(map.getZoom(), 18), { duration: .6 }) : getFreshPos();
 $('gps').onclick = $('btnLocate').onclick;
 
@@ -378,9 +423,14 @@ $('file').onchange = async e => {
   const f = e.target.files[0]; e.target.value = '';
   if (!f) return;
   toast('กำลังอ่านรูปและตำแหน่ง…');
-  let loc = null;
-  try { const g = await exifr.gps(f); if (g?.latitude) loc = { lat: g.latitude, lng: g.longitude, acc: null, source: 'GPS ในรูป' }; } catch {}
-  if (!loc) { const p = await getFreshPos(); if (p) loc = { ...p, source: 'GPS มือถือ' }; }
+  let loc = null, taken = null;
+  try { const t = await exifr.parse(f, ['DateTimeOriginal', 'CreateDate']); taken = t?.DateTimeOriginal || t?.CreateDate || null; } catch {}
+  // a photo taken just now was taken where we stand -> average live GPS (more accurate than one EXIF fix);
+  // an older photo (gallery) keeps the position stored in the photo itself
+  const justNow = !taken || Math.abs(Date.now() - new Date(taken).getTime()) < 3 * 60 * 1000;
+  if (!justNow) { try { const g = await exifr.gps(f); if (g?.latitude) loc = { lat: g.latitude, lng: g.longitude, acc: null, source: 'GPS ในรูป' }; } catch {} }
+  if (!loc) { let a = await collectPos(); if (!a) { await getFreshPos(); a = avgPos(); } if (a) loc = { lat: a.lat, lng: a.lng, acc: a.acc, source: a.n > 1 ? `GPS เฉลี่ย ${a.n} ครั้ง` : 'GPS มือถือ' }; }
+  if (!loc) { try { const g = await exifr.gps(f); if (g?.latitude) loc = { lat: g.latitude, lng: g.longitude, acc: null, source: 'GPS ในรูป' }; } catch {} }
   const photo = await compress(f);
   if (!loc) { pending = { photo }; startManual('ไม่พบตำแหน่ง · แตะแผนที่ตรงจุดที่วางท่อ'); return; }
   pending = { ...loc, photo }; openSave();
@@ -519,22 +569,35 @@ $('importFile').onchange = async e => {
 
 // ---------- AR camera view ----------
 const arEl = $('ar'), arLayer = $('arLayer'), arVideo = $('arVideo');
-const ar = { on: false, raf: 0, stream: null, az: null, el: 0, sAz: null, sEl: 0, got: false, rel: false, range: 100, els: new Map(), t0: 0 };
-const AR_RANGES = [30, 100, 500, Infinity], CAM_H = 1.4, HFOV = 55, RAD = Math.PI / 180;
+const ar = { on: false, raf: 0, stream: null, raw: null, s: {}, yawT: 0, yaw: 0, got: false, rel: false, range: 100, els: new Map(), t0: 0, tick: 0, nearest: null, aimed: null };
+const AR_RANGES = [30, 100, 500, Infinity], CAM_H = 1.4, CAM_LONG_FOV = 65, RAD = Math.PI / 180;
 const norm = a => ((a % 360) + 360) % 360, sdiff = (a, b) => ((a - b + 540) % 360) - 180, clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const dirName = a => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(a / 45) % 8];
 const rangeLabel = r => r === Infinity ? 'ทั้งหมด' : `${r} ม.`;
 
+// manual corrections the user can set against a known pin (expire after 1 h / 500 m)
+let cal = { dLat: 0, dLng: 0, azOff: 0, t: 0, lat: 0, lng: 0 };
+function loadCal() {
+  try { const c = JSON.parse(localStorage.getItem('pp-cal') || 'null');
+    if (c && Date.now() - c.t < 3600e3 && (!me || L.latLng(me.lat, me.lng).distanceTo([c.lat, c.lng]) < 500)) { cal = c; return; } } catch {}
+  cal = { dLat: 0, dLng: 0, azOff: 0, t: 0, lat: 0, lng: 0 };
+}
+function saveCal() { cal.t = Date.now(); if (me) { cal.lat = me.lat; cal.lng = me.lng; } try { localStorage.setItem('pp-cal', JSON.stringify(cal)); } catch {} }
+const isCal = () => cal.t && (cal.dLat || cal.dLng || cal.azOff);
+
+// Device attitude -> camera axes in a East/North/Up world (W3C rotation matrix). Handles pitch AND roll.
 function onOrient(e) {
   const ios = e.webkitCompassHeading;
   if (e.beta == null || e.gamma == null) return;
-  if (!e.absolute && ios == null) { ar.rel = true; return; }   // relative-only sensor: no true north
+  if (!e.absolute && ios == null) { ar.rel = true; return; }          // no true north on this sensor
   const a = (e.alpha || 0) * RAD, b = e.beta * RAD, g = e.gamma * RAD;
   const sA = Math.sin(a), cA = Math.cos(a), sB = Math.sin(b), cB = Math.cos(b), sG = Math.sin(g), cG = Math.cos(g);
-  // camera looks out of the back of the phone (-Z of the device) -> direction in East/North/Up
-  const fx = -(cA * sG + cG * sA * sB), fy = -(sA * sG - cA * cG * sB), fz = -(cB * cG);
-  ar.az = ios != null ? ios : norm(Math.atan2(fx, fy) / RAD);
-  ar.el = Math.asin(clamp(fz, -1, 1)) / RAD; ar.got = true;
+  const R = [cA * cG - sA * sB * sG, cG * sA + cA * sB * sG, -cB * sG];             // screen right
+  const U = [-cB * sA, cA * cB, sB];                                                // screen up
+  const F = [-(cA * sG + cG * sA * sB), -(sA * sG - cA * cG * sB), -(cB * cG)];     // out of the back camera
+  ar.raw = { R, U, F }; ar.got = true;
+  if (ios != null && Math.abs(F[2]) < .6) ar.yawT = sdiff(ios, Math.atan2(F[0], F[1]) / RAD);   // iOS: re-anchor to true north
 }
 function arPinEl(p) {
   let el = ar.els.get(p.id);
@@ -546,65 +609,107 @@ function arPinEl(p) {
   el.onclick = () => select(p.id, false);
   arLayer.appendChild(el); ar.els.set(p.id, el); return el;
 }
+// focal length in screen pixels, from the real video size (object-fit: cover crops the sides)
+function arFocal(W, H) {
+  const vw = arVideo.videoWidth, vh = arVideo.videoHeight;
+  if (vw && vh && !arEl.classList.contains('nocam')) return (Math.max(vw, vh) / 2) / Math.tan(CAM_LONG_FOV / 2 * RAD) * Math.max(W / vw, H / vh);
+  return (W / 2) / Math.tan(20 * RAD);
+}
 function arFrame() {
   if (!ar.on) return; ar.raf = requestAnimationFrame(arFrame);
   const W = arEl.clientWidth, H = arEl.clientHeight;
-  if (ar.az != null) {
-    ar.sAz = ar.sAz == null ? ar.az : norm(ar.sAz + sdiff(ar.az, ar.sAz) * .2);
-    ar.sEl += (ar.el - ar.sEl) * .2;
+  if (ar.raw) {
+    for (const k of ['F', 'U', 'R']) {
+      const sv = ar.s[k]; if (!sv) { ar.s[k] = ar.raw[k].slice(); continue; }
+      for (let i = 0; i < 3; i++) sv[i] += (ar.raw[k][i] - sv[i]) * .25;
+      const n = Math.hypot(...sv) || 1; for (let i = 0; i < 3; i++) sv[i] /= n;
+    }
+    ar.yaw += sdiff(ar.yawT, ar.yaw) * .2;
   }
-  $('arHead').textContent = ar.sAz == null ? '--°' : `${Math.round(ar.sAz)}° ${dirName(ar.sAz)}`;
-  $('arGps').textContent = me ? `GPS ±${Math.round(me.acc)} ม.` : 'GPS …';
+  const S = ar.s, ready = !!S.F;
+  const camAz = ready ? norm(Math.atan2(S.F[0], S.F[1]) / RAD + ar.yaw + cal.azOff) : null;
+  const gp = livePos();                                      // steadier than the raw latest fix
+  const eff = gp ? { lat: gp.lat + cal.dLat, lng: gp.lng + cal.dLng, acc: gp.acc } : null;
+  $('arHead').textContent = camAz == null ? '--°' : `${Math.round(camAz)}° ${dirName(camAz)}`;
+  $('arGps').textContent = gp ? `GPS ±${Math.round(gp.acc)} ม.${isCal() ? ' · ปรับแล้ว' : ''}` : 'GPS …';
   let hint = '';
   const hide = () => ar.els.forEach(e => e.hidden = true);
-  if (!me) { hint = 'กำลังหาตำแหน่ง GPS…'; hide(); }
-  else if (ar.sAz == null) {
+  if (!eff) { hint = 'กำลังหาตำแหน่ง GPS…'; hide(); }
+  else if (!ready) {
     hide();
     hint = performance.now() - ar.t0 < 3000 ? 'กำลังอ่านเข็มทิศ…' : ar.rel
       ? 'เครื่องนี้อ่านทิศเหนือจริงไม่ได้ · ลองขยับมือถือเป็นเลข 8 หรือใช้มือถือเครื่องอื่น'
       : 'ไม่พบเซนเซอร์เข็มทิศ · มุมมองนี้ใช้ได้บนมือถือเท่านั้น';
   } else {
-    const f = (W / 2) / Math.tan(HFOV / 2 * RAD), cosLat = Math.cos(me.lat * RAD);
+    const f = arFocal(W, H), cosLat = Math.cos(eff.lat * RAD), yawAll = ar.yaw + cal.azOff;
     const items = [];
     pinData.forEach(p => {
-      const dy = (p.lat - me.lat) * 111320, dx = (p.lng - me.lng) * 111320 * cosLat, dist = Math.hypot(dx, dy);
-      if (dist <= ar.range) items.push({ p, dist, dAz: sdiff(norm(Math.atan2(dx, dy) / RAD), ar.sAz) });
+      const dy = (p.lat - eff.lat) * 111320, dx = (p.lng - eff.lng) * 111320 * cosLat, dist = Math.hypot(dx, dy);
+      if (dist > ar.range) return;
+      const brg = norm(Math.atan2(dx, dy) / RAD), b = (brg - yawAll) * RAD, e = -Math.atan2(CAM_H, Math.max(dist, 1));   // pin lies on the ground
+      const t = [Math.sin(b) * Math.cos(e), Math.cos(b) * Math.cos(e), Math.sin(e)];
+      items.push({ p, dist, brg, xc: dot(t, S.R), yc: dot(t, S.U), zc: dot(t, S.F) });
     });
     items.sort((a, b) => a.dist - b.dist);
-    const seen = new Set(); let edges = 0;
+    const seen = new Set(); let edges = 0; ar.aimed = null; let bestAim = 1e9;
     for (const it of items) {
       const el = arPinEl(it.p); seen.add(it.p.id);
-      const front = Math.abs(it.dAz) < 90;
-      let x = W / 2 + Math.tan(clamp(it.dAz, -89, 89) * RAD) * f;
-      const elT = -Math.atan2(CAM_H, Math.max(it.dist, 1)) / RAD;       // pin sits on the ground
-      let y = H / 2 - Math.tan(clamp(elT - ar.sEl, -80, 80) * RAD) * f;
-      const on = front && x > 20 && x < W - 20;
+      let x = W / 2 + f * it.xc / Math.max(it.zc, .001), y = H / 2 - f * it.yc / Math.max(it.zc, .001);
+      const on = it.zc > .05 && x > 20 && x < W - 20;
+      const dAz = Math.abs(sdiff(it.brg, camAz)); if (it.dist >= 3 && dAz < bestAim) { bestAim = dAz; ar.aimed = { ...it, dAz }; }
       if (!on) {
         if (edges++ >= 4) { el.hidden = true; continue; }
-        x = it.dAz > 0 ? W - 14 : 14; y = clamp(y, H * .3, H * .7);
-        el.className = 'ar-m edge ' + (it.dAz > 0 ? 'r' : 'l');
-      } else { y = clamp(y, 150, H - 90); el.className = 'ar-m'; }
+        const right = it.xc >= 0; x = right ? W - 14 : 14; y = it.zc > .05 ? clamp(y, H * .3, H * .7) : H * .5;
+        el.className = 'ar-m edge ' + (right ? 'r' : 'l');
+      } else { y = clamp(y, 120, H - 60); el.className = 'ar-m'; }
       el.hidden = false;
       const sc = on ? clamp(1.25 - it.dist / 200, .7, 1.25) : 1;
       el.style.transform = `translate3d(${x}px,${y}px,0) scale(${sc})`;
       el.style.zIndex = String(1000 - Math.min(999, Math.round(it.dist)));
-      const sm = el.querySelector('small'), t = fmtDist(it.dist);
+      const unc = Math.round(Math.hypot(it.p.acc ?? 8, eff.acc));
+      const sm = el.querySelector('small'), t = `${fmtDist(it.dist)} · ±${unc}`;
       if (sm.dataset.k !== t) { sm.dataset.k = t; sm.textContent = t; }
     }
     ar.els.forEach((e, id) => { if (!seen.has(id)) e.hidden = true; });
-    if (ar.sEl < -55) hint = 'ยกมือถือตั้งตรง แล้วหันกล้องไปข้างหน้า';
+    ar.nearest = null; pinData.forEach(p => { const d = L.latLng(eff.lat, eff.lng).distanceTo([p.lat, p.lng]); if (!ar.nearest || d < ar.nearest.d) ar.nearest = { p, d }; });
+    const el0 = Math.asin(clamp(S.F[2], -1, 1)) / RAD;
+    if (el0 < -55) hint = 'ยกมือถือตั้งตรง แล้วหันกล้องไปข้างหน้า';
     else if (!items.length) hint = pinData.size ? `ไม่มีจุดในระยะ ${rangeLabel(ar.range)} · กดปุ่มระยะเพื่อขยาย` : 'ยังไม่มีจุดที่บันทึกไว้';
-    else if (me.acc > 20) hint = `GPS คลาดเคลื่อน ±${Math.round(me.acc)} ม. · หมุดอาจเพี้ยน ลองไปที่โล่งแจ้ง`;
-    else if (performance.now() - ar.t0 < 6000) hint = 'หันกล้องไปทางจุดที่บันทึกไว้ แตะหมุดเพื่อดูรายละเอียด';
+    else if (eff.acc > 20) hint = `GPS คลาดเคลื่อน ±${Math.round(eff.acc)} ม. · หมุดอาจเพี้ยน ลองไปที่โล่งแจ้ง`;
+    else if (performance.now() - ar.t0 < 6000) hint = 'หันกล้องไปทางจุดที่บันทึกไว้ · ถ้าหมุดไม่ตรง กด "ปรับให้ตรง"';
   }
+  if (!$('arCal').hidden && ++ar.tick % 6 === 0) renderCal();
   const h = $('arHint'); if (h.textContent !== hint) h.textContent = hint;
 }
+function renderCal() {
+  const n = ar.nearest, a = ar.aimed;
+  $('calA').textContent = n && n.d <= 25 ? `ใกล้คุณสุด: ${n.p.type} (ห่าง ${fmtDist(n.d)})` : 'ต้องยืนใกล้หมุดที่รู้ตำแหน่งแน่ ๆ ไม่เกิน 25 ม.';
+  $('calAbtn').disabled = !(n && n.d <= 25);
+  $('calB').textContent = a && a.dAz <= 40 ? `หมุดที่ตรงทิศที่สุด: ${a.p.type} (${fmtDist(a.dist)})` : 'หันกล้องไปทางหมุดที่อยู่ไกลกว่า 3 ม.';
+  $('calBbtn').disabled = !(a && a.dAz <= 40);
+  const m = Math.hypot(cal.dLat * 111320, cal.dLng * 111320 * Math.cos((me?.lat || 0) * RAD));
+  $('calS').textContent = isCal() ? `ปรับแล้ว: ตำแหน่ง ${m.toFixed(1)} ม. · ทิศ ${cal.azOff >= 0 ? '+' : ''}${cal.azOff.toFixed(0)}°` : 'ยังไม่ได้ปรับ';
+}
+$('arCalBtn').onclick = () => { $('arCal').hidden = false; $('arCalBtn').hidden = true; $('arHint').style.display = 'none'; renderCal(); };
+function closeCal() { $('arCal').hidden = true; $('arCalBtn').hidden = false; $('arHint').style.display = ''; }
+$('calClose').onclick = closeCal;
+$('calAbtn').onclick = () => {                      // "I'm standing at this pin" -> fix GPS bias
+  const n = ar.nearest, gp = livePos(); if (!n || !gp) return;
+  cal.dLat = n.p.lat - gp.lat; cal.dLng = n.p.lng - gp.lng; saveCal(); renderCal(); toast('ปรับตำแหน่งแล้ว');
+};
+$('calBbtn').onclick = () => {                      // "this pin is straight ahead" -> fix compass bias
+  const a = ar.aimed; if (!a || !ar.s.F) return;
+  const cur = norm(Math.atan2(ar.s.F[0], ar.s.F[1]) / RAD + ar.yaw + cal.azOff);
+  cal.azOff += sdiff(a.brg, cur); saveCal(); renderCal(); toast('ปรับทิศแล้ว');
+};
+$('calReset').onclick = () => { cal = { dLat: 0, dLng: 0, azOff: 0, t: 0, lat: 0, lng: 0 }; try { localStorage.removeItem('pp-cal'); } catch {} renderCal(); };
+
 async function openAR() {
   if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
     try { if (await DeviceOrientationEvent.requestPermission() !== 'granted') toast('ต้องอนุญาตเซนเซอร์เข็มทิศ'); } catch {}
   }
-  closeDetail(); Object.assign(ar, { on: true, az: null, sAz: null, got: false, rel: false, t0: performance.now() });
-  arEl.hidden = false; arEl.classList.remove('nocam');
+  closeDetail(); loadCal(); Object.assign(ar, { on: true, raw: null, s: {}, yaw: 0, yawT: 0, got: false, rel: false, t0: performance.now() });
+  arEl.hidden = false; arEl.classList.remove('nocam'); closeCal();
   window.addEventListener('deviceorientationabsolute', onOrient);
   window.addEventListener('deviceorientation', onOrient);
   try {
